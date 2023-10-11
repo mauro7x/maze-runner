@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT.js Example</title>
+    <style>
+        /* Hide the colored circle pointer initially */
+        .colored-circle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: red; /* Set your desired color */
+            border-radius: 50%;
+            display: none;
+        }
+
+        /* Create a horizontal line in the center of the screen */
+        .line {
+            position: absolute;
+            width: 10cm;
+            height: 8px;
+            background-color: black; /* Line color */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -1px); /* Center the line horizontally and align it with the circle */
+        }
+    </style>
+</head>
+<body>
+    <!-- Include the MQTT.js library using a CDN -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+    <!-- Your JavaScript code -->
+    <script>
+        // An mqtt variable will be initialized globally
+        console.log(mqtt);
+
+        // Create an MQTT client and connect to the EMQX broker (localhost:8083)
+        const client = mqtt.connect('ws://broker.emqx.io:8083/mqtt');
+
+        // Function to subscribe to the click topic
+        function ClickedTopic() {
+            client.subscribe('ClickedTopic', function (err) {
+                if (!err) {
+                    console.log('clicked');
+                }
+            });
+        }
+
+        // Function to unsubscribe from the click topic (release the mouse)
+        function RealeasedTopic() {
+            client.unsubscribe('ClickedTopic', function (err) {
+                if (!err) {
+                    console.log('released');
+                }
+            });
+        }
+
+        // Function to subscribe and publish to TouchedTopic
+        function TouchedTopic() {
+            client.subscribe('TouchedTopic', function (err) {
+                if (!err) {
+                    console.log('Line touched');
+                }
+            });
+
+        }
+
+        // Event handler to receive messages
+        client.on('message', function (topic, message) {
+            // message is Buffer
+            console.log('Received message on topic:', topic, 'Message:', message.toString());
+        });
+
+        let isMouseDown = false;
+
+        // Event handler when the document is clicked
+        document.addEventListener('mousedown', function (event) {
+            isMouseDown = true;
+
+            // Subscribe to the topic when the mouse is pressed
+            ClickedTopic();
+
+            // Show the colored circle
+            const coloredCircle = document.querySelector('.colored-circle');
+            coloredCircle.style.display = 'block';
+
+            // Move the colored circle to the mouse position
+            coloredCircle.style.left = event.pageX + 'px';
+            coloredCircle.style.top = event.pageY + 'px';
+            
+        });
+
+        document.addEventListener('mousemove', function (event) {
+            if (isMouseDown) {
+                // Move the colored circle to the mouse position
+                const coloredCircle = document.querySelector('.colored-circle');
+                coloredCircle.style.left = event.pageX + 'px';
+                coloredCircle.style.top = event.pageY + 'px';
+
+                // Check if the mouse pointer is over the line
+                const line = document.querySelector('.line');
+                const lineBounds = line.getBoundingClientRect();
+
+                if (
+                    event.pageX >= lineBounds.left &&
+                    event.pageX <= lineBounds.left + lineBounds.width &&
+                    event.pageY >= lineBounds.top &&
+                    event.pageY <= lineBounds.top + lineBounds.height
+                ) {
+                    // Mouse pointer is over the line, subscribe and publish to TouchedTopic
+                    TouchedTopic();
+                }
+            }
+        });
+
+        document.addEventListener('mouseup', function () {
+            isMouseDown = false;
+
+            // Unsubscribe from the topic when the mouse is released
+            RealeasedTopic();
+        });
+    </script>
+
+    <!-- Colored circle pointer element -->
+    <div class="colored-circle"></div>
+
+    <!-- Horizontal line element -->
+    <div class="line"></div>
+</body>
+</html>
