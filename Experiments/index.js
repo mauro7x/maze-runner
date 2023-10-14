@@ -12,7 +12,7 @@ canvas.height = innerHeight // Set the height of the canvas to the height of the
 
 class Boundary { // Create a class for the boundaries
     static width = 40
-    static height = 40
+    static height = 40 
     constructor({ position }) {  
         this.position = position
         this.width = 40
@@ -28,14 +28,24 @@ class Boundary { // Create a class for the boundaries
 
     class Player { // Create a class for the player
         constructor({ position}) {
+            this.id = this.generateUniquePlayerId(); // Generate a unique ID for the player
+            this.color = this.getRandomColor(); // Generate a random color for the player
             this.position = position
             this.radius = 10
+             
+            // Publish the position of the player every 100ms
+            this.positionPublishInterval = setInterval(() => {
+                this.publishPosition();
+                }, 100);
+
+            //Suscribe to other players positions
+            this.subscribeToOtherPlayersPositions();
         }
 
     draw() {
         c.beginPath()
         c.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2, false) // Draw a circle
-        c.fillStyle = 'white' // Set the color of the circle
+        c.fillStyle = this.color // Set the color of the circle
         c.fill() // Fill the circle with the color
         c.closePath()
     }
@@ -48,36 +58,70 @@ class Boundary { // Create a class for the boundaries
                 this.position.y + this.radius > boundary.position.y &&
                 this.position.y - this.radius < boundary.position.y + boundary.height
         ){
-            //Suscribe to topic
-            CollisionTopic();
             return true;
         }
         
         } 
-        //Release suscription
-        ReleaseCollisionTopic();
+
         return false;
     }
+
+    // Generate an unique player id
+    generateUniquePlayerId() {
+        // Puedes utilizar una combinación de un prefijo y un número aleatorio
+        return 'player_' + Math.floor(Math.random() * 1000000);
+    }
+
+    //Generate a random color
+    getRandomColor() {
+        const r = Math.floor(Math.random() * 256); 
+        const g = Math.floor(Math.random() * 256);
+        const b = Math.floor(Math.random() * 256); 
+        return `rgb(${r}, ${g}, ${b})`; 
+    }
+
+    // Publish the position of the player
+    publishPosition() {
+        client.publish('player_positions/' + this.id, JSON.stringify(this.position));
+        console.log('published position', this.position);
+    }
+
+    // Suscribe to the positions of other players
+    subscribeToOtherPlayersPositions() {
+        client.subscribe('player_positions/+');
+        console.log('subscribed to player positions');
+    }
+
     
 }
 
 
 const map = [
-    ['-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-'],
-    ['-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
-    ['-', ' ', '-', ' ', '-', ' ', '-', '-', '-', '-', ' ', '-', '-', ' ', '-', ' ', '-', '-'],
-    ['-', ' ', '-', ' ', '-', ' ', '-', ' ', ' ', ' ', ' ', ' ', '-', ' ', '-', ' ', '-', '-'],
-    ['-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-', '-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
-    ['-', '-', '-', ' ', '-', '-', ' ', '-', ' ', ' ', '-', ' ', '-', '-', ' ', '-', '-', '-'],
-    ['-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
-    ['-', ' ', '-', '-', ' ', '-', ' ', '-', '-', '-', '-', ' ', '-', '-', ' ', '-', ' ', '-'],
-    ['-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
-    ['-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
+    [' ',' ',' ',' ',' ',' ',' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ',' ',' ',' ',' ',' ',' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ',' ',' ',' ',' ',' ',' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+    [' ',' ',' ',' ',' ',' ',' ', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', ' ', ' ', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', ' ', '-', ' ', '-', ' ', '-', '-', '-', '-', ' ', '-', '-', ' ', '-', ' ', '-', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', ' ', '-', ' ', '-', ' ', '-', ' ', ' ', ' ', ' ', ' ', '-', ' ', '-', ' ', '-', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-', '-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', '-', '-', ' ', '-', '-', ' ', '-', ' ', ' ', '-', ' ', '-', '-', ' ', '-', '-', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', ' ', '-', '-', ' ', '-', ' ', '-', '-', '-', '-', ' ', '-', '-', ' ', '-', ' ', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
+    [' ',' ',' ',' ',' ',' ',' ','-', ' ', ' ', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
 ]
 
 const boundaries = []
-const player = new Player({ position: { x : 40, y: 40 } })  
 
+// Set an initial position for the player at the bottom left corner of the map
+const initialPlayerPosition = {
+    x: Boundary.width,
+    y: canvas.height - Boundary.height
+}
+const player = new Player({ position: initialPlayerPosition });
+
+// Create the boundaries based on the map
 map.forEach((row, i)=>{ //i represents the index of the row
     row.forEach((symbol, j) => {
         switch(symbol) {
@@ -96,49 +140,6 @@ map.forEach((row, i)=>{ //i represents the index of the row
 })
 
 
-//--------------------------------
-// Suscriptions to topic functions
-//--------------------------------
-
-//Mouse click topic suscription
-function ClickTopic(){
-    client.subscribe('mouseclick', function (err) {//
-        if (!err) {
-            console.log('click')
-            client.publish('mouseclick', 'click')
-        }
-    })
-}
-
-//Mouse click topic unsubscribe (release suscription)
-function ReleaseTopic(){
-    client.unsubscribe('mouseclick', function (err) {
-        if (!err) {
-            console.log('release')
-            client.publish('mouseclick', 'release')
-        }
-    })
-}
-
-//Collision topic suscription 
-function CollisionTopic(){
-    client.subscribe('collision', function (err) {//
-        if (!err) {
-            console.log('collision')
-            client.publish('collision', 'collision')
-        }
-    })
-}
-
-//Collision topic unsubscribe (no collision)
-function ReleaseCollisionTopic(){
-    client.unsubscribe('collision', function (err) {
-        if (!err) {
-            //console.log('no collision')
-            client.publish('collision', 'no collision')
-        }
-    })
-}
 
 client.on('connect', function () {
     console.log('Connected to the MQTT broker');
@@ -151,9 +152,6 @@ client.on('message', function (topic, message) {
 });
 
 
-
-
-
 //-----------------------------
 // Actions
 //-----------------------------
@@ -161,6 +159,7 @@ client.on('message', function (topic, message) {
 
 // Add an event listener to track mouse movement when the mouse is down
 let isMouseDown = false;
+
 
 canvas.addEventListener("mousedown", () => {
     isMouseDown = true;
@@ -175,21 +174,17 @@ canvas.addEventListener("mousemove", (event) => {
     if (isMouseDown) {
         player.position.x = event.clientX;
         player.position.y = event.clientY;
-        //Suscribe to topic
-        ClickTopic();
-
+        
         // Clear the canvas and redraw the boundaries and player
         c.clearRect(0, 0, canvas.width, canvas.height);
         boundaries.forEach((boundary) => {
             boundary.draw();
         });
+
         player.draw();
 
         // Check for collision
         player.CollisionDetection(boundaries);
-    } else {
-        //Release suscription
-        ReleaseTopic();
     }
 });
 
