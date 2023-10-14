@@ -1,6 +1,18 @@
+//-----------------------------
+// Client
+//-----------------------------
+
 const client = mqtt.connect('ws://broker.emqx.io:8083/mqtt'); // Connect to MQTT broker
 console.log(client) 
-
+client.on('connect', function () {
+    console.log('Connected to the MQTT broker');
+});
+// Event handler to receive messages
+client.on('message', function (topic, message) {
+    // message is Buffer
+        console.log('Received message on topic:', topic, 'Message:', message.toString());
+    });
+    
 //-----------------------------
 // Map and player functions
 //-----------------------------
@@ -25,29 +37,32 @@ class Boundary { // Create a class for the boundaries
     }
 }
 
-
-    class Player { // Create a class for the player
-        constructor({ position}) {
-            this.id = this.generateUniquePlayerId(); // Generate a unique ID for the player
-            this.color = this.getRandomColor(); // Generate a random color for the player
-            this.position = position
-            this.radius = 10
+class Player { // Create a class for the player
+    constructor({ position}) {
+        this.id = this.generateUniquePlayerId(); // Generate a unique ID for the player
+        this.color = this.getRandomColor(); // Generate a random color for the player
+        this.position = position
+        this.radius = 10
+        this.score = 0 // Set the initial score to 0
              
-            // Publish the position of the player every 100ms
-            this.positionPublishInterval = setInterval(() => {
-                this.publishPosition();
-                }, 100);
+        // Publish the position of the player every 100ms
+        this.positionPublishInterval = setInterval(() => {
+        this.publishPosition();
+        }, 100);
 
-            //Suscribe to other players positions
-            this.subscribeToOtherPlayersPositions();
-        }
+        //Suscribe to other players positions
+        this.subscribeToOtherPlayersPositions();
+
+        //Suscribe to other players scores
+        this.subscribeToOtherPlayersScores();
+    }
 
     draw() {
         c.beginPath()
         c.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2, false) // Draw a circle
         c.fillStyle = this.color // Set the color of the circle
         c.fill() // Fill the circle with the color
-        c.closePath()
+        c.closePath() 
     }
 
     CollisionDetection(boundaries) {
@@ -83,7 +98,7 @@ class Boundary { // Create a class for the boundaries
     // Publish the position of the player
     publishPosition() {
         client.publish('player_positions/' + this.id, JSON.stringify(this.position));
-        console.log('published position', this.position);
+        //console.log('published position', this.position);
     }
 
     // Suscribe to the positions of other players
@@ -92,15 +107,50 @@ class Boundary { // Create a class for the boundaries
         console.log('subscribed to player positions');
     }
 
+    //Suscribe to the scores of other players
+    subscribeToOtherPlayersScores() {
+        client.subscribe('player_scores/+');
+        console.log('subscribed to player scores');
+    }
+
+    //Reset the player to the initial position
+    resetToInitialPosition() {
+        this.position.x = initialPlayerPosition.x;
+        this.position.y = initialPlayerPosition.y;
+    }
+
+    //Check if the player has reached the win position
+    checkWinPosition() {
+        const rowIndex = Math.floor(this.position.y / Boundary.height);
+        const colIndex = Math.floor(this.position.x / Boundary.width);
+    
+        // Check if the indices are within the bounds of the map
+        if (rowIndex >= 0 && rowIndex < map.length && colIndex >= 0 && colIndex < map[0].length) {
+            // Check if the element at the indices is 'W'
+            if (map[rowIndex][colIndex] == 'W') {
+                return true;
+            }
+        }
+    
+        return false; // Default to false if the indices are out of bounds or not 'W'
+    }
+
+    //Update the score
+    updateScore() {
+        this.score += 1;
+        const scoreElement = document.getElementById('score');
+        scoreElement.textContent = 'Score: ' + this.score; // Update the displayed score
+        client.publish('player_scores/' + this.id, JSON.stringify(this.score)); // Publish the score
+    }
+
     
 }
-
 
 const map = [
     [' ',' ',' ',' ',' ',' ',' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
     [' ',' ',' ',' ',' ',' ',' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
     [' ',' ',' ',' ',' ',' ',' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-    [' ',' ',' ',' ',' ',' ',' ', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', ' ', ' ', '-'],
+    [' ',' ',' ',' ',' ',' ',' ', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', 'W', 'W', '-'],
     [' ',' ',' ',' ',' ',' ',' ','-', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '-'],
     [' ',' ',' ',' ',' ',' ',' ','-', ' ', '-', ' ', '-', ' ', '-', '-', '-', '-', ' ', '-', '-', ' ', '-', ' ', '-', '-'],
     [' ',' ',' ',' ',' ',' ',' ','-', ' ', '-', ' ', '-', ' ', '-', ' ', ' ', ' ', ' ', ' ', '-', ' ', '-', ' ', '-', '-'],
@@ -140,18 +190,6 @@ map.forEach((row, i)=>{ //i represents the index of the row
 })
 
 
-
-client.on('connect', function () {
-    console.log('Connected to the MQTT broker');
-});
-
-// Event handler to receive messages
-client.on('message', function (topic, message) {
-// message is Buffer
-    console.log('Received message on topic:', topic, 'Message:', message.toString());
-});
-
-
 //-----------------------------
 // Actions
 //-----------------------------
@@ -169,12 +207,18 @@ canvas.addEventListener("mouseup", () => {
     isMouseDown = false;
 });
 
+
 canvas.addEventListener("mousemove", (event) => {
     // Move the player only when the mouse button is down
     if (isMouseDown) {
         player.position.x = event.clientX;
         player.position.y = event.clientY;
         
+        //Check if the player has won
+        if (player.checkWinPosition()) {
+            player.updateScore();
+        }
+
         // Clear the canvas and redraw the boundaries and player
         c.clearRect(0, 0, canvas.width, canvas.height);
         boundaries.forEach((boundary) => {
@@ -185,7 +229,14 @@ canvas.addEventListener("mousemove", (event) => {
 
         // Check for collision
         player.CollisionDetection(boundaries);
+        //When a collition is detected, the player is moved to the initial position
+        if (player.CollisionDetection(boundaries)) {
+            player.resetToInitialPosition();
+            console.log('collision detected');
+        }
+        
     }
 });
+
 
 
