@@ -22,9 +22,10 @@
 
 ## Infra
 
-- [ ] Crear definición de docker compose para broker básico single-node.
+- [x] Crear definición de docker compose para broker básico single-node.
 - [ ] Modificar definición para broker con 2 nodos estáticos.
 - [ ] Crear un cluster de N nodos dinámicos con Kubernetes.
+- [ ] Desplegar el juego terminado en un host estático (github pages?).
 
 ## Presentación
 
