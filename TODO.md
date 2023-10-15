@@ -3,12 +3,13 @@
 ## Cliente
 
 - [ ] Finalizar funcionamiento de un nivel básico:
-  - [ ] Que los eventos se envíen solo mientras el usuario tiene apretado el click.
-  - [ ] Se reinicia la posición a la linea de salida:
-    - [ ] Cuando el usuario suelta el click.
+  - [x] Que los eventos se envíen solo mientras el usuario tiene apretado el click.
+  - [x] Se reinicia la posición:
+    - [x] Cuando el usuario suelta el click.
     - [ ] Cuando el usuario colisiona.
     - [ ] Cuando el usuario gana.
-  - [ ] Recibir eventos y graficar otros usuarios.
+    - [ ] El reinicio es a la linea de salida.
+  - [x] Recibir eventos y graficar otros usuarios.
   - [ ] Scores:
     - [ ] Tabla de scores.
     - [ ] Arreglar la suma de scores, que sume solo una vez.
