@@ -16,6 +16,9 @@
 - [ ] Creación de salas:
   - [ ] Creación página inicial para crear sala o unirme a una.
   - [ ] Vista administrador (owner de la sala) vs. vista jugador.
+- [ ] Estilos:
+  - [ ] Fijarse que funcione bien con el re-size de la ventana.
+  - [ ] Fijarse que funcione bien en celulares.
 - [ ] Posibilidad de cambiar de mapa:
   - [ ] Múltiples mapas v1: preset de mapas hechos por nosotros.
   - [ ] Múltiples mapas v2: generación al azar.
