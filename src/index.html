@@ -8,17 +8,11 @@
 <body>
     <div class="info-container">
         <!-- TODO: Scores, player info, etc. -->
-        <div class="scores-container">
-            <h1>Scores:</h1>
-            <ol class="scores-list">
-                <li>Julia</li>
-                <li>Mauro</li>
-                <li>Nikita</li>
-            </ol>
-        </div>
     </div>
     <div class="game-container">
-        <canvas id="game-canvas"></canvas>
+        <canvas class="canvas" id="self-canvas"></canvas>
+        <canvas class="canvas" id="players-canvas"></canvas>
+        <canvas class="canvas" id="map-canvas"></canvas>
     </div>
 
     <!-- Include the MQTT.js library using a CDN -->
