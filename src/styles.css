@@ -1,0 +1,47 @@
+body {
+  margin: 0;
+  display: flex;
+  height: 100vh;
+}
+
+.info-container {
+  padding: 1%;
+  width: 20%;
+  background-color: skyblue;
+  color: black;
+}
+
+.game-container {
+  width: 80%;
+  background-color: pink;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  min-width: 440px;
+  min-height: 340px;
+}
+
+.canvas {
+  min-width: 400px;
+  min-height: 300px;
+  width: 70%;
+  height: 80%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#self-canvas {
+  z-index: 2;
+}
+
+#players-canvas {
+  z-index: 1;
+}
+
+#map-canvas {
+  background-color: white;
+  z-index: 0;
+}
