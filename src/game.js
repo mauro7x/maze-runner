@@ -259,7 +259,9 @@ class Game {
     this.client = initClient.bind(this)();
   }
 
-  static toScaledPosition(position) {
+  // Draw helper functions
+
+  static normalize(position) {
     return {
       x: Math.min(Math.max(position.x / selfCanvas.width, 0), selfCanvas.width),
       y: Math.min(
@@ -269,10 +271,10 @@ class Game {
     };
   }
 
-  static fromScaledPosition(scaledPosition) {
+  static denormalize(normalizedPosition) {
     return {
-      x: scaledPosition.x * selfCanvas.width,
-      y: scaledPosition.y * selfCanvas.height,
+      x: normalizedPosition.x * selfCanvas.width,
+      y: normalizedPosition.y * selfCanvas.height,
     };
   }
 
@@ -284,12 +286,30 @@ class Game {
     context.closePath();
   }
 
+  static drawRectangle(context, x, y, w, h, color) {
+    context.fillStyle = color;
+    context.fillRect(x, y, w, h);
+  }
+
+  static drawRange(context, boundaries, boundWidth, boundHeight, color) {
+    boundaries.forEach(([i, j, width]) => {
+      Game.drawRectangle(
+        context,
+        j * boundWidth,
+        i * boundHeight,
+        boundWidth * width,
+        boundHeight,
+        color
+      );
+    });
+  }
+
   drawSelf() {
     // Clear canvas
     selfCanvasC.clearRect(0, 0, selfCanvas.width, selfCanvas.height);
 
     // Scale position
-    const position = Game.fromScaledPosition(this.position);
+    const position = Game.denormalize(this.position);
 
     // Draw my player
     // TODO: Add some distinctive to know its myself
@@ -302,65 +322,57 @@ class Game {
 
     // Draw each user (but myself)
     Object.keys(this.players).forEach((username) => {
+      // Ignore myself
       if (username === this.username) return;
+
       const player = this.players[username];
-      const position = Game.fromScaledPosition(
-        player.position ?? this.map.initialPosition
-      );
+
+      // Ignore players that are not moving
+      if (!player.moving) return;
+
+      // Compute position (scaling)
+      const position = Game.denormalize(player.position);
 
       Game.drawPlayer(playersCanvasC, position, player.color);
     });
   }
 
   drawMap() {
-    const { data, nCols, nRows } = this.map;
+    const { nCols, nRows, boundaries, startingZone, winningZone } = this.map;
+
     // Clear canvas
     mapCanvasC.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
 
+    // Compute width and height of each bound
     const boundWidth = mapCanvas.width / nCols;
     const boundHeight = mapCanvas.height / nRows;
 
-    data.forEach((row, i) => {
-      row.forEach((symbol, j) => {
-        switch (symbol) {
-          case "-":
-            mapCanvasC.fillStyle = "rgb(255, 0, 255)";
-            mapCanvasC.fillRect(
-              j * boundWidth,
-              i * boundHeight,
-              boundWidth,
-              boundHeight
-            );
-            break;
-          case "W":
-            mapCanvasC.fillStyle = "rgb(0, 255, 0)";
-            mapCanvasC.fillRect(
-              j * boundWidth,
-              i * boundHeight,
-              boundWidth,
-              boundHeight
-            );
-            break;
+    // Draw boundaries
+    Game.drawRange(
+      mapCanvasC,
+      this.map.boundaries.wall,
+      boundWidth,
+      boundHeight,
+      config.colors.wall
+    );
 
-          case "I":
-            mapCanvasC.fillStyle = "rgb(0, 0, 255)";
-            mapCanvasC.fillRect(
-              j * boundWidth,
-              i * boundHeight,
-              boundWidth,
-              boundHeight
-            );
-            break;
-        }
-      });
-    });
-  }
+    // Draw starting zone
+    Game.drawRange(
+      mapCanvasC,
+      this.map.boundaries.startingZone,
+      boundWidth,
+      boundHeight,
+      config.colors.startingZone
+    );
 
-  resetPosition() {
-    this.moving = false;
-    this.position = this.map.initialPosition;
-    this.publishPosition();
-    this.drawSelf();
+    // Draw winning zone
+    Game.drawRange(
+      mapCanvasC,
+      this.map.boundaries.winningZone,
+      boundWidth,
+      boundHeight,
+      config.colors.winningZone
+    );
   }
 
   onMouseDown(event) {
@@ -369,43 +381,86 @@ class Game {
       y: event.offsetY,
     };
 
-    this.position = Game.toScaledPosition(position);
+    this.position = Game.normalize(position);
 
     // Check if starting in starting zone
-    if (
-      this.map.startingZone.x[0] <= this.position.x &&
-      this.position.x <= this.map.startingZone.x[1] &&
-      this.map.startingZone.y[0] <= this.position.y &&
-      this.position.y <= this.map.startingZone.y[1]
-    ) {
-      this.moving = true;
-      this.drawSelf();
-    } else {
-      alert("You can't start outside the starting (blue) zone");
-      return;
-    }
+
+    // if (
+    //   this.map.startingZone.x[0] <= this.position.x &&
+    //   this.position.x <= this.map.startingZone.x[1] &&
+    //   this.map.startingZone.y[0] <= this.position.y &&
+    //   this.position.y <= this.map.startingZone.y[1]
+    // ) {
+    //   this.moving = true;
+    //   this.drawSelf();
+    // } else {
+    //   alert("You can't start outside the starting (blue) zone");
+    //   return;
+    // }
   }
 
   onMouseUp(event) {
     if (this.moving) {
-      this.resetPosition();
+      this.stopMoving();
     }
   }
 
   onMouseLeave(event) {
     if (this.moving) {
-      this.resetPosition();
+      this.stopMoving();
     }
   }
 
   onMouseMove(event) {
     if (!this.moving) return;
 
-    this.position = Game.toScaledPosition({
+    this.position = Game.normalize({
       x: event.offsetX,
       y: event.offsetY,
     });
     this.drawSelf();
+  }
+
+  // Misc functions
+
+  static parseRanges(map, target) {
+    const ranges = [];
+
+    map.forEach((row, i) => {
+      row.forEach((symbol, j) => {
+        if (symbol !== target) {
+          return;
+        }
+
+        // We merge ranges horizontally if possible
+        const lastValue = ranges[ranges.length - 1];
+        if (
+          lastValue &&
+          lastValue[0] === i &&
+          lastValue[1] + lastValue[2] === j
+        ) {
+          ranges[ranges.length - 1][2] += 1;
+          return;
+        }
+
+        // If not, we just add a new boundary
+        ranges.push([i, j, 1]);
+      });
+    });
+
+    return ranges;
+  }
+
+  stopMoving() {
+    this.moving = false;
+    this.position = null;
+
+    // Publish that we stopped moving
+    this.client.publish(
+      POSITION,
+      JSON.stringify({ username: this.username, position: null, moving: false })
+    );
+    this.lastPublishedPosition = null;
   }
 
   publishPosition() {
@@ -421,12 +476,26 @@ class Game {
     // Publish new position
     this.client.publish(
       POSITION,
-      JSON.stringify({ username: this.username, position: this.position })
+      JSON.stringify({
+        username: this.username,
+        position: this.position,
+        moving: true,
+      })
     );
     this.lastPublishedPosition = this.position;
   }
 
-  // Misc functions
+  processMap(map) {
+    return {
+      nRows: map.length,
+      nCols: map[0]?.length ?? 0,
+      boundaries: {
+        wall: Game.parseRanges(map, "-"),
+        startingZone: Game.parseRanges(map, "I"),
+        winningZone: Game.parseRanges(map, "W"),
+      },
+    };
+  }
 
   initGame() {
     selfCanvas.addEventListener("mousedown", this.onMouseDown.bind(this));
@@ -444,9 +513,6 @@ class Game {
         this.drawMap();
       }.bind(this)
     );
-
-    // Set initial position and draw myself
-    this.resetPosition();
 
     // Draw other players in loop
     setInterval(() => this.drawPlayers(), config.timeMs.drawOthersEvery);
@@ -480,65 +546,6 @@ class Game {
 
     // Continue closing the browser window
     return null;
-  }
-
-  processMap(map) {
-    const nRows = map.length;
-    const nCols = map[0]?.length ?? 0;
-
-    let foundInitial = false; // Flag for "I"
-    let foundWinning = false; // Flag for "W"
-
-    let startingZone = null;
-    let winningZone = null;
-
-    //process map
-    map.forEach((row, i) => {
-      if (foundInitial && foundWinning) return;
-      row.forEach((symbol, j) => {
-        if (!foundInitial && symbol === "I") {
-          startingZone = {
-            x: [j / nCols, (j + 2) / nCols],
-            y: [i / nRows, (i + 1) / nRows],
-          };
-          foundInitial = true;
-        }
-
-        if (!foundWinning && symbol === "W") {
-          winningZone = {
-            x: [j / nCols, (j + 2) / nCols],
-            y: [i / nRows, (i + 1) / nRows],
-          };
-          foundWinning = true;
-        }
-      });
-    });
-
-    boundaries = [];
-
-    map.forEach((row, i) => {
-      row.forEach((symbol, j) => {
-        if (symbol !== "-") {
-          return;
-        }
-      });
-    });
-
-    // Fix the initial position in the middle of the starting zone
-    const initialPosition = {
-      x: (startingZone.x[0] + startingZone.x[1]) / 2,
-      y: (startingZone.y[0] + startingZone.y[1]) / 2,
-    };
-
-    // Construct map object
-    this.map = {
-      data: map,
-      initialPosition,
-      winningZone,
-      startingZone,
-      nRows,
-      nCols,
-    };
   }
 
   // Handlers
@@ -582,7 +589,7 @@ class Game {
     if (username === this.username) return;
 
     // Add new player
-    this.players[username] = { ...player, position: this.map.initialPosition };
+    this.players[username] = { ...player, position: null, moving: false };
   }
 
   handlePlayerLeft(payload) {

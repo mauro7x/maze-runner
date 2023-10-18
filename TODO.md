@@ -37,3 +37,7 @@
 - [ ] Diagrama de arquitectura.
 - [ ] Preparar informe.
 - [ ] Preparar presentación (slides).
+
+## Optimizaciones
+
+- [ ] Mergear rangos verticalmente (boundaries).
