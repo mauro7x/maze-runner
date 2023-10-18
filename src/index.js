@@ -297,9 +297,9 @@ class Game {
 
   drawMap() {
     // Clear canvas
-
     mapCanvasC.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
-    //Get map size
+
+    // Get map size
     const nRows = this.map.length;
     const nCols = this.map[0]?.length ?? 0;
 
@@ -308,8 +308,6 @@ class Game {
 
     this.map.forEach((row, i) => {
       row.forEach((symbol, j) => {
-        console.log("Boundary width position being drawn:", j * boundWidth);
-        console.log("Boundary height position being drawn:", i * boundHeight);
         switch (symbol) {
           case "-":
             mapCanvasC.fillStyle = "rgb(255, 0, 255)";
@@ -394,6 +392,14 @@ class Game {
 
     // Draw map
     this.drawMap();
+
+    // Re-draw map when resizing window
+    window.addEventListener(
+      "resize",
+      function (event) {
+        this.drawMap();
+      }.bind(this)
+    );
 
     // Draw myself
     this.drawSelf();
