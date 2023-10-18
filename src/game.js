@@ -153,7 +153,7 @@ class GameManager {
     this.players = {};
 
     // Map
-    this.initMap(map);
+    this.map = map;
 
     // Client
     this.handlers = {
@@ -161,55 +161,6 @@ class GameManager {
       [UPDATE_PLAYER_LEFT]: this.handlePlayerLeft.bind(this),
     };
     this.client = initClient.bind(this)();
-  }
-
-  initMap(map) {
-    const nRows = map.length;
-    const nCols = map[0]?.length ?? 0;
-
-    let foundInitial = false; // Flag for "I"
-    let foundWinning = false; // Flag for "W"
-
-    let startingZone = null;
-    let winningZone = null;
-
-    //process map
-    map.forEach((row, i) => {
-      if (foundInitial && foundWinning) return;
-      row.forEach((symbol, j) => {
-        if (!foundInitial && symbol === "I") {
-          startingZone = {
-            x: [j / nCols, (j + 2) / nCols],
-            y: [i / nRows, (i + 1) / nRows],
-          };
-          foundInitial = true;
-        }
-
-        if (!foundWinning && symbol === "W") {
-          winningZone = {
-            x: [j / nCols, (j + 2) / nCols],
-            y: [i / nRows, (i + 1) / nRows],
-          };
-          foundWinning = true;
-        }
-      });
-    });
-
-    // Fix the initial position in the middle of the starting zone
-    const initialPosition = {
-      x: (startingZone.x[0] + startingZone.x[1]) / 2,
-      y: (startingZone.y[0] + startingZone.y[1]) / 2,
-    };
-
-    // Construct map object
-    this.map = {
-      data: map,
-      initialPosition,
-      winningZone,
-      startingZone,
-      nRows,
-      nCols,
-    };
   }
 
   getRandomColor() {
@@ -531,13 +482,72 @@ class Game {
     return null;
   }
 
+  processMap(map) {
+    const nRows = map.length;
+    const nCols = map[0]?.length ?? 0;
+
+    let foundInitial = false; // Flag for "I"
+    let foundWinning = false; // Flag for "W"
+
+    let startingZone = null;
+    let winningZone = null;
+
+    //process map
+    map.forEach((row, i) => {
+      if (foundInitial && foundWinning) return;
+      row.forEach((symbol, j) => {
+        if (!foundInitial && symbol === "I") {
+          startingZone = {
+            x: [j / nCols, (j + 2) / nCols],
+            y: [i / nRows, (i + 1) / nRows],
+          };
+          foundInitial = true;
+        }
+
+        if (!foundWinning && symbol === "W") {
+          winningZone = {
+            x: [j / nCols, (j + 2) / nCols],
+            y: [i / nRows, (i + 1) / nRows],
+          };
+          foundWinning = true;
+        }
+      });
+    });
+
+    boundaries = [];
+
+    map.forEach((row, i) => {
+      row.forEach((symbol, j) => {
+        if (symbol !== "-") {
+          return;
+        }
+      });
+    });
+
+    // Fix the initial position in the middle of the starting zone
+    const initialPosition = {
+      x: (startingZone.x[0] + startingZone.x[1]) / 2,
+      y: (startingZone.y[0] + startingZone.y[1]) / 2,
+    };
+
+    // Construct map object
+    this.map = {
+      data: map,
+      initialPosition,
+      winningZone,
+      startingZone,
+      nRows,
+      nCols,
+    };
+  }
+
   // Handlers
   handleJoinResponse(payload) {
     console.debug("[Game] Join response received", payload);
     const { username, players, map } = payload;
     this.username = username;
     this.players = players;
-    this.map = map;
+    this.map = this.processMap(map);
     this.color = players[username].color;
 
     console.debug("[Game] Unsubscribing from JOIN_RES");
