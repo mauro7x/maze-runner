@@ -1,14 +1,29 @@
-// Join a game
-export const JOIN_REQ = "join/req";
-export const JOIN_RES = "join/res";
+const topics = {
+  // Join game messages
+  JOIN_REQ: "join/req",
+  JOIN_RES: "join/res",
 
-export const POSITION = "position";
+  // Game normal messages
+  POSITION: "position",
 
-// Updates
-export const UPDATES = "update/#";
-export const UPDATE_PLAYER_JOINED = "update/player_joined";
-export const UPDATE_PLAYER_LEFT = "update/player_left";
-export const UPDATE_MAP = "update/map";
+  // Updates for the room
+  UPDATES: "update/#",
+  UPDATE_PLAYER_JOINED: "update/player_joined",
+  UPDATE_PLAYER_LEFT: "update/player_left",
+  UPDATE_MAP: "update/map",
 
-// Control plane
-export const KEEPALIVE = "keepalive";
+  // Control plane
+  KEEPALIVE: "keepalive",
+  USED_ROOM_REQ: "used/req",
+  USED_ROOM_RES: "used/res",
+};
+
+export const generateTopicsForRoom = (room) => {
+  const topicsForRoom = {};
+
+  for (const key in topics) {
+    topicsForRoom[key] = `room_${room}/${topics[key]}`;
+  }
+
+  return topicsForRoom;
+};
