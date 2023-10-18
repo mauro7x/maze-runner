@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" type="text/css" href="home.css" />
+</head>
+
+<body>
+    <div class="title">
+        <h1>Maze Runner</h1>
+        <p>Welcome to Maze Runner Pub-Sub multiplayer online game. To get started, please fill in your desired username.
+        </p>
+    </div>
+
+    <input class="username-input" placeholder="Desired username" />
+
+    <div class="join-options">
+        <div class="join-option">
+            <h2>Join a room...</h2>
+            <input id="join-room-input" placeholder="Room name" />
+            <button id="join-room-button">Join</button>
+        </div>
+        <div class="join-option">
+            <h2>...or create one!</h2>
+            <button id="create-room-button">Create room</button>
+        </div>
+    </div>
+
+
+    <!-- Include the MQTT.js library using a CDN -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script type="module" src="home.js"></script>
+</body>
+
+</html>
