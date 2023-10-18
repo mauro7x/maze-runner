@@ -63,6 +63,12 @@ function initClient() {
   client.on("connect", this.onConnect.bind(this));
   client.on("message", onMessage.bind(this));
 
+  // TODO: Handle these events
+  client.on("offline", () => console.log("Client went offline"));
+  client.on("reconnect", () => console.log("Client reconnected"));
+  client.on("disconnect", () => console.log("Client disconnected"));
+  client.on("close", () => console.log("Client closed"));
+
   return client;
 }
 
@@ -149,7 +155,6 @@ class Game {
     this.username = null;
     this.moving = false;
     this.position = Game.initialPosition;
-
     this.color = null;
 
     // Optimization
@@ -382,11 +387,12 @@ class Game {
 
 console.debug("Configuration:", config);
 
+// Temporary approach vvvvvvvvvv
 const params = window.location.search;
 console.debug("Window params:", params);
-
 if (params === "?manager=yes") {
   const gameManager = new GameManager();
 }
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 const game = new Game();
