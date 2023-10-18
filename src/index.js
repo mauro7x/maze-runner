@@ -153,7 +153,7 @@ class GameManager {
     this.players = {};
 
     // Map
-    this.map = map;
+    this.initMap(map);
 
     // Client
     this.handlers = {
@@ -161,6 +161,56 @@ class GameManager {
       [UPDATE_PLAYER_LEFT]: this.handlePlayerLeft.bind(this),
     };
     this.client = initClient.bind(this)();
+  }
+
+  initMap(map) {
+    const nRows = map.length;
+    const nCols = map[0]?.length ?? 0;
+
+    let foundInitial = false; // Flag for "I"
+    let foundWinning = false; // Flag for "W"
+
+    let startingZone = null;
+    let winningZone = null;
+
+    //process map
+    map.forEach((row, i) => {
+      if (foundInitial && foundWinning) return;
+      row.forEach((symbol, j) => {
+        if (!foundInitial && symbol === "I") {
+          startingZone = {
+            x: [j / nCols, (j + 2) / nCols],
+            y: [i / nRows, (i + 1) / nRows],
+          };
+          foundInitial = true;
+        }
+
+        if (!foundWinning && symbol === "W") {
+          winningZone = {
+            x: [j / nCols, (j + 2) / nCols],
+            y: [i / nRows, (i + 1) / nRows],
+          };
+          foundWinning = true;
+        }
+      });
+    });
+
+    //fix the initial position in the middle of the starting zone
+    const initialPosition = {
+      x: (startingZone.x[0] + startingZone.x[1]) / 2,
+      y: (startingZone.y[0] + startingZone.y[1]) / 2,
+    };
+
+    //Print map
+    console.log("Initial position: ", initialPosition);
+    this.map = {
+      data: map,
+      initialPosition,
+      winningZone,
+      startingZone,
+      nRows,
+      nCols,
+    };
   }
 
   getRandomColor() {
@@ -236,10 +286,6 @@ class GameManager {
 }
 
 class Game {
-  static initialPosition = {
-    x: 0,
-    y: 0,
-  };
   static radius = 5;
 
   constructor() {
@@ -247,9 +293,9 @@ class Game {
     this.players = {};
     this.username = null;
     this.moving = false;
-    this.position = Game.initialPosition;
+    this.position = null;
     this.color = null;
-
+    this.map = null;
     // Optimization
     this.lastPublishedPosition = null;
 
@@ -309,7 +355,7 @@ class Game {
       if (username === this.username) return;
       const player = this.players[username];
       const position = Game.fromScaledPosition(
-        player.position ?? Game.initialPosition
+        player.position ?? this.map.initialPosition
       );
 
       Game.drawPlayer(playersCanvasC, position, player.color);
@@ -317,21 +363,37 @@ class Game {
   }
 
   drawMap() {
+    const { data, nCols, nRows } = this.map;
     // Clear canvas
     mapCanvasC.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
-
-    // Get map size
-    const nRows = this.map.length;
-    const nCols = this.map[0]?.length ?? 0;
 
     const boundWidth = mapCanvas.width / nCols;
     const boundHeight = mapCanvas.height / nRows;
 
-    this.map.forEach((row, i) => {
+    data.forEach((row, i) => {
       row.forEach((symbol, j) => {
         switch (symbol) {
           case "-":
             mapCanvasC.fillStyle = "rgb(255, 0, 255)";
+            mapCanvasC.fillRect(
+              j * boundWidth,
+              i * boundHeight,
+              boundWidth,
+              boundHeight
+            );
+            break;
+          case "W":
+            mapCanvasC.fillStyle = "rgb(0, 255, 0)";
+            mapCanvasC.fillRect(
+              j * boundWidth,
+              i * boundHeight,
+              boundWidth,
+              boundHeight
+            );
+            break;
+
+          case "I":
+            mapCanvasC.fillStyle = "rgb(0, 0, 255)";
             mapCanvasC.fillRect(
               j * boundWidth,
               i * boundHeight,
@@ -346,7 +408,7 @@ class Game {
 
   resetPosition() {
     this.moving = false;
-    this.position = Game.initialPosition;
+    this.position = this.map.initialPosition;
     this.publishPosition();
     this.drawSelf();
   }
@@ -356,11 +418,25 @@ class Game {
       x: event.offsetX,
       y: event.offsetY,
     };
-    // TODO: Check if starting in allowed area
 
-    this.moving = true;
     this.position = Game.toScaledPosition(position);
-    this.drawSelf();
+    console.log("Starting position:", this.position);
+    console.log("Starting zone:", this.map.startingZone);
+
+    //Check if starting in starting zone
+    if (
+      this.map.startingZone.x[0] <= this.position.x &&
+      this.position.x <= this.map.startingZone.x[1] &&
+      this.map.startingZone.y[0] <= this.position.y &&
+      this.position.y <= this.map.startingZone.y[1]
+    ) {
+      console.log("Starting in starting zone");
+      this.moving = true;
+      this.drawSelf();
+    } else {
+      console.log("You can't start outside the starting zone");
+      return;
+    }
   }
 
   onMouseUp(event) {
@@ -422,8 +498,8 @@ class Game {
       }.bind(this)
     );
 
-    // Draw myself
-    this.drawSelf();
+    // Set initial position and draw myself
+    this.resetPosition();
 
     // Draw other players in loop
     setInterval(() => this.drawPlayers(), config.timeMs.drawOthersEvery);
@@ -460,7 +536,6 @@ class Game {
   }
 
   // Handlers
-
   handleJoinResponse(payload) {
     console.debug("[Game] Join response received", payload);
     const { username, players, map } = payload;
@@ -501,7 +576,7 @@ class Game {
     if (username === this.username) return;
 
     // Add new player
-    this.players[username] = { ...player, position: Game.initialPosition };
+    this.players[username] = { ...player, position: this.map.initialPosition };
   }
 
   handlePlayerLeft(payload) {
