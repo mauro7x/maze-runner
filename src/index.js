@@ -390,15 +390,12 @@ class Game {
     this.client.publish(JOIN_REQ, JSON.stringify(payload));
   }
 
-  // TODO: This is not working!
   exitGame(event) {
-    console.error("Exit game called");
-
     event.preventDefault(); // Avoid browser from closing
 
     const payload = { username: this.username };
-    client.publish(UPDATE_PLAYER_LEFT, JSON.stringify(payload));
-    client.end();
+    this.client.publish(UPDATE_PLAYER_LEFT, JSON.stringify(payload));
+    this.client.end();
 
     // Continue closing the browser window
     return null;
