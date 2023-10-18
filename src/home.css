@@ -1,0 +1,28 @@
+body {
+  margin: 0;
+  padding: 10%;
+  height: 100vh;
+}
+
+.title {
+  text-align: center;
+}
+
+.username-input {
+  width: 100%;
+  text-align: center;
+}
+
+.join-options {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+}
+
+.join-option {
+  width: 45%;
+
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+}

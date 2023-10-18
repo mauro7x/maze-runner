@@ -1,13 +1,37 @@
 import config from "./config.js";
+import { generateTopicsForRoom } from "./topics.js";
+
+// TODO: Create more maps? Create a loading map mechanism?
 import map from "./map.js";
-import {
-  JOIN_RES,
+
+// ----------------------------------------------------------------------------
+// INITIAL CONFIGURATION
+// ----------------------------------------------------------------------------
+
+console.debug("Configuration:", config);
+
+// Parse URL
+const url = new URL(window.location.href);
+const room = url.searchParams.get("room");
+const owner = url.searchParams.get("owner");
+
+// Update room's name
+const roomTextEl = document.getElementById("room-text");
+roomTextEl.innerText = `Room: ${room}`;
+
+// Generate topics for room
+const {
   JOIN_REQ,
+  JOIN_RES,
+  KEEPALIVE,
   POSITION,
+  UPDATES,
+  UPDATE_MAP,
   UPDATE_PLAYER_JOINED,
   UPDATE_PLAYER_LEFT,
-  KEEPALIVE,
-} from "./topics.js";
+  USED_ROOM_REQ,
+  USED_ROOM_RES,
+} = generateTopicsForRoom(room);
 
 // ----------------------------------------------------------------------------
 // WINDOW ELEMENTS
@@ -58,9 +82,6 @@ function onConnect() {
 
 function onMessage(topic, message) {
   const payload = JSON.parse(message.toString() ?? "");
-
-  // Uncomment for debugging purposes
-  // console.debug("Message received:", { topic, payload });
 
   if (!(topic in this.handlers)) {
     console.warn("Missing handler for message", {
@@ -469,6 +490,14 @@ class Game {
     // Draw map
     this.drawMap();
 
+    // Re-draw map when resizing window
+    window.addEventListener(
+      "resize",
+      function (event) {
+        this.drawMap();
+      }.bind(this)
+    );
+
     // Set initial position and draw myself
     this.resetPosition();
 
@@ -561,6 +590,8 @@ class Game {
     // Ignore if its myself
     if (username === this.username) return;
 
+    console.log(`[Game] Player <${username}> disconnected`);
+
     // Delete player that left
     delete this.players[username];
   }
@@ -577,14 +608,8 @@ class Game {
 // INSTANCES CREATION
 // ----------------------------------------------------------------------------
 
-console.debug("Configuration:", config);
-
-// Temporary approach vvvvvvvvvv
-const params = window.location.search;
-console.debug("Window params:", params);
-if (params === "?manager=yes") {
+if (owner === "yes") {
   const gameManager = new GameManager();
 }
-// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 const game = new Game();

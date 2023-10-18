@@ -14,9 +14,9 @@
     - [ ] Tabla de scores.
     - [ ] Arreglar la suma de scores, que sume solo una vez.
     - [ ] Centralizar esta decisión en el owner de la sala?
-- [ ] Creación de salas:
-  - [ ] Creación página inicial para crear sala o unirme a una.
-  - [ ] Vista administrador (owner de la sala) vs. vista jugador.
+- [x] Creación de salas:
+  - [x] Creación página inicial para crear sala o unirme a una.
+  - [x] Vista administrador (owner de la sala) vs. vista jugador.
 - [ ] Estilos:
   - [ ] Fijarse que funcione bien con el re-size de la ventana.
   - [ ] Fijarse que funcione bien en celulares.
