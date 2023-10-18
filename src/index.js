@@ -21,7 +21,7 @@ const playersCanvas = document.getElementById("players-canvas");
 const playersCanvasC = playersCanvas.getContext("2d");
 
 // Map canvas (z = 0)
-const mapCanvas = document.getElementById("self-canvas");
+const mapCanvas = document.getElementById("map-canvas");
 const mapCanvasC = mapCanvas.getContext("2d");
 
 function updateCanvasSize() {
@@ -227,7 +227,6 @@ class Game {
     // Clear canvas
 
     mapCanvasC.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
-    mapCanvasC.beginPath();
     //Get map size
     const nRows = this.map.length;
     const nCols = this.map[0]?.length ?? 0;
@@ -252,7 +251,6 @@ class Game {
         }
       });
     });
-    mapCanvasC.closePath();
   }
 
   resetPosition() {
