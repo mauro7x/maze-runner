@@ -122,6 +122,55 @@ function initClient() {
   return client;
 }
 
+function processMap(map) {
+  const nRows = map.length;
+  const nCols = map[0]?.length ?? 0;
+
+  const getSymbol = (position) => {
+    const row = Math.floor(position.y * nRows);
+    const col = Math.floor(position.x * nCols);
+
+    return map[row][col];
+  };
+
+  const countSymbol = (position, symbol) => {
+    const xMax = position.x + Game.xRadius;
+    const xMin = position.x - Game.xRadius;
+    const yMax = position.y + Game.yRadius;
+    const yMin = position.y - Game.yRadius;
+
+    const points = [
+      [xMin, yMin],
+      [xMin, yMax],
+      [xMax, yMin],
+      [xMax, yMax],
+    ];
+
+    let count = 0;
+    points.forEach(([x, y]) => {
+      if (getSymbol({ x, y }) === symbol) {
+        count += 1;
+      }
+    });
+
+    return count;
+  };
+
+  return {
+    raw: map,
+    nRows,
+    nCols,
+    boundaries: {
+      wall: Game.parseRanges(map, "-"),
+      startingZone: Game.parseRanges(map, "I"),
+      winningZone: Game.parseRanges(map, "W"),
+    },
+    hitsWall: (position) => countSymbol(position, "-") > 0,
+    hitsWinningZone: (position) => countSymbol(position, "W") > 0,
+    isStartingZone: (position) => getSymbol(position) === "I",
+  };
+}
+
 // ----------------------------------------------------------------------------
 // KEEP ALIVE WEIRD HACKFIX
 // https://github.com/mqttjs/MQTT.js/issues/1257#issuecomment-987094416
@@ -236,7 +285,8 @@ class GameManager {
 }
 
 class Game {
-  static radius = 5;
+  static xRadius = config.radius / config.aspectRatio;
+  static yRadius = config.radius;
 
   constructor() {
     // Internal state
@@ -261,13 +311,18 @@ class Game {
 
   // Draw helper functions
 
+  static getRadius() {
+    return Game.normalize({ x: Game.radius, y: Game.radius });
+  }
+
   static normalize(position) {
     return {
-      x: Math.min(Math.max(position.x / selfCanvas.width, 0), selfCanvas.width),
-      y: Math.min(
-        Math.max(position.y / selfCanvas.height, 0),
-        selfCanvas.height
-      ),
+      x:
+        Math.min(Math.max(position.x, 0), selfCanvas.width) /
+        (selfCanvas.width + 1),
+      y:
+        Math.min(Math.max(position.y, 0), selfCanvas.height) /
+        (selfCanvas.height + 1),
     };
   }
 
@@ -279,8 +334,18 @@ class Game {
   }
 
   static drawPlayer(context, position, color) {
+    const radius = Game.denormalize({ x: Game.xRadius, y: Game.yRadius });
+
     context.beginPath();
-    context.arc(position.x, position.y, Game.radius, 0, Math.PI * 2, false);
+    context.ellipse(
+      position.x,
+      position.y,
+      radius.x,
+      radius.y,
+      0,
+      Math.PI * 2,
+      false
+    );
     context.fillStyle = color;
     context.fill();
     context.closePath();
@@ -308,10 +373,11 @@ class Game {
     // Clear canvas
     selfCanvasC.clearRect(0, 0, selfCanvas.width, selfCanvas.height);
 
-    // Scale position
-    const position = Game.denormalize(this.position);
+    // Acts as an erase() function
+    if (!this.position) return;
 
-    // Draw my player
+    // Scale position and draw myself
+    const position = Game.denormalize(this.position);
     // TODO: Add some distinctive to know its myself
     Game.drawPlayer(selfCanvasC, position, this.color);
   }
@@ -376,27 +442,19 @@ class Game {
   }
 
   onMouseDown(event) {
-    const position = {
+    const position = Game.normalize({
       x: event.offsetX,
       y: event.offsetY,
-    };
+    });
 
-    this.position = Game.normalize(position);
+    if (!this.map.isStartingZone(position)) {
+      alert("You cannot start outside the starting zone");
+      return;
+    }
 
-    // Check if starting in starting zone
-
-    // if (
-    //   this.map.startingZone.x[0] <= this.position.x &&
-    //   this.position.x <= this.map.startingZone.x[1] &&
-    //   this.map.startingZone.y[0] <= this.position.y &&
-    //   this.position.y <= this.map.startingZone.y[1]
-    // ) {
-    //   this.moving = true;
-    //   this.drawSelf();
-    // } else {
-    //   alert("You can't start outside the starting (blue) zone");
-    //   return;
-    // }
+    this.moving = true;
+    this.position = position;
+    this.drawSelf();
   }
 
   onMouseUp(event) {
@@ -414,10 +472,17 @@ class Game {
   onMouseMove(event) {
     if (!this.moving) return;
 
-    this.position = Game.normalize({
+    const position = Game.normalize({
       x: event.offsetX,
       y: event.offsetY,
     });
+
+    if (this.map.hitsWall(position)) {
+      this.stopMoving();
+      return;
+    }
+
+    this.position = position;
     this.drawSelf();
   }
 
@@ -454,6 +519,7 @@ class Game {
   stopMoving() {
     this.moving = false;
     this.position = null;
+    this.drawSelf(); // it will erase myself since position = null
 
     // Publish that we stopped moving
     this.client.publish(
@@ -483,18 +549,6 @@ class Game {
       })
     );
     this.lastPublishedPosition = this.position;
-  }
-
-  processMap(map) {
-    return {
-      nRows: map.length,
-      nCols: map[0]?.length ?? 0,
-      boundaries: {
-        wall: Game.parseRanges(map, "-"),
-        startingZone: Game.parseRanges(map, "I"),
-        winningZone: Game.parseRanges(map, "W"),
-      },
-    };
   }
 
   initGame() {
@@ -554,7 +608,7 @@ class Game {
     const { username, players, map } = payload;
     this.username = username;
     this.players = players;
-    this.map = this.processMap(map);
+    this.map = processMap(map);
     this.color = players[username].color;
 
     console.debug("[Game] Unsubscribing from JOIN_RES");
