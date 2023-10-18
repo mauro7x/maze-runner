@@ -398,11 +398,24 @@ class Game {
       y: event.offsetY,
     };
 
-    //Check if starting in allowed area
-
-    this.moving = true;
     this.position = Game.toScaledPosition(position);
-    this.drawSelf();
+    console.log("Starting position:", this.position);
+    console.log("Starting zone:", this.map.startingZone);
+
+    //Check if starting in starting zone
+    if (
+      this.map.startingZone.x[0] <= this.position.x &&
+      this.position.x <= this.map.startingZone.x[1] &&
+      this.map.startingZone.y[0] <= this.position.y &&
+      this.position.y <= this.map.startingZone.y[1]
+    ) {
+      console.log("Starting in starting zone");
+      this.moving = true;
+      this.drawSelf();
+    } else {
+      console.log("You can't start outside the starting zone");
+      return;
+    }
   }
 
   onMouseUp(event) {
