@@ -2,7 +2,7 @@
 // Client
 //-----------------------------
 
-const client = mqtt.connect('ws://broker.emqx.io:8083/mqtt'); // Connect to MQTT broker
+const client = mqtt.connect('ws://localhost:8083/mqtt'); // Connect to MQTT broker
 console.log(client) 
 client.on('connect', function () {
     console.log('Connected to the MQTT broker');
