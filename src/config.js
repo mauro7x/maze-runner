@@ -6,6 +6,7 @@ export default {
   timeMs: {
     publishPositionEvery: 50,
     drawOthersEvery: 50,
+    checkWinEvery: 50,
   },
   radius: 0.02,
   aspectRatio: 4 / 3,
@@ -14,4 +15,6 @@ export default {
     startingZone: "rgb(0, 0, 255)",
     winningZone: "rgb(0, 255, 0)",
   },
+
+  pointWhenSucces: 50,
 };

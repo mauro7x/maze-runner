@@ -31,6 +31,7 @@ const {
   UPDATE_PLAYER_LEFT,
   USED_ROOM_REQ,
   USED_ROOM_RES,
+  UPDATE_SCORES,
 } = generateTopicsForRoom(room);
 
 // ----------------------------------------------------------------------------
@@ -237,7 +238,6 @@ class GameManager {
     // Create player
     const player = {
       color: this.getRandomColor(),
-      score: 0,
     };
     this.players[username] = player;
 
@@ -246,6 +246,7 @@ class GameManager {
       username,
       players: this.players,
       map: this.map,
+      score: 0,
     };
     console.debug("[GameManager] Join request accepted", resPayload);
     this.client.publish(JOIN_RES, JSON.stringify(resPayload));
@@ -254,6 +255,7 @@ class GameManager {
     const broadcastPayload = {
       username,
       player,
+      score: 0,
     };
     console.debug("[GameManager] Broadcasting new joined player", resPayload);
     this.client.publish(UPDATE_PLAYER_JOINED, JSON.stringify(broadcastPayload));
@@ -262,7 +264,7 @@ class GameManager {
   }
 
   handlePlayerLeft(payload) {
-    const { username } = payload;
+    const { username, score } = payload;
 
     if (!(username in this.players)) {
       console.warn(`[GameManager] Player <${username}> is unknown`);
@@ -296,6 +298,7 @@ class Game {
     this.position = null;
     this.color = null;
     this.map = null;
+    this.score = 0;
     // Optimization
     this.lastPublishedPosition = null;
 
@@ -305,6 +308,7 @@ class Game {
       [POSITION]: this.handlePosition.bind(this),
       [UPDATE_PLAYER_JOINED]: this.handlePlayerJoined.bind(this),
       [UPDATE_PLAYER_LEFT]: this.handlePlayerLeft.bind(this),
+      [UPDATE_SCORES]: this.handleScore.bind(this),
     };
     this.client = initClient.bind(this)();
   }
@@ -439,6 +443,23 @@ class Game {
       boundHeight,
       config.colors.winningZone
     );
+  }
+
+  updateScore() {
+    this.score += config.pointWhenSucces;
+    this.client.publish(
+      UPDATE_SCORES,
+      JSON.stringify({ username: this.username, score: this.score })
+    );
+  }
+
+  checkWinningZone() {
+    if (!this.map.hitsWinningZone(this.position)) {
+      return;
+    }
+    this.stopMoving();
+    // Update score
+    this.updateScore();
   }
 
   onMouseDown(event) {
@@ -577,11 +598,19 @@ class Game {
         this.publishPosition();
       }
     }, config.timeMs.publishPositionEvery);
+
+    // Check if we are in the winning zone
+    setInterval(() => {
+      if (this.moving) {
+        this.checkWinningZone();
+      }
+    }, config.timeMs.checkWinEvery);
   }
 
   joinGame() {
     const payload = {
       username: "Username",
+      score: 0,
     };
 
     console.debug("[Game] Subscribing to JOIN_RES");
@@ -605,11 +634,12 @@ class Game {
   // Handlers
   handleJoinResponse(payload) {
     console.debug("[Game] Join response received", payload);
-    const { username, players, map } = payload;
+    const { username, players, map, score } = payload;
     this.username = username;
     this.players = players;
     this.map = processMap(map);
     this.color = players[username].color;
+    this.score = score;
 
     console.debug("[Game] Unsubscribing from JOIN_RES");
     this.client.unsubscribe(JOIN_RES);
@@ -618,7 +648,12 @@ class Game {
     window.addEventListener("beforeunload", this.exitGame.bind(this));
 
     console.debug("[Game] Creating needed subscriptions");
-    this.client.subscribe([POSITION, UPDATE_PLAYER_JOINED, UPDATE_PLAYER_LEFT]);
+    this.client.subscribe([
+      POSITION,
+      UPDATE_PLAYER_JOINED,
+      UPDATE_PLAYER_LEFT,
+      UPDATE_SCORES,
+    ]);
 
     console.debug("[Game] Initializing game");
     this.initGame();
@@ -637,13 +672,41 @@ class Game {
   }
 
   handlePlayerJoined(payload) {
-    const { username, player } = payload;
+    const { username, player, score } = payload;
 
     // Ignore if its myself
     if (username === this.username) return;
 
     // Add new player
-    this.players[username] = { ...player, position: null, moving: false };
+    this.players[username] = {
+      ...player,
+      position: null,
+      moving: false,
+      score: 0,
+    };
+  }
+
+  displayScore() {
+    const scoresContainer = document.getElementById("scores-container");
+    // Clear the previous scores
+    scoresContainer.innerHTML = "";
+
+    // Display each player's score
+    Object.keys(this.players).forEach((username) => {
+      const scoreElement = document.createElement("p");
+      scoreElement.textContent = `${username}: Score - ${this.players[username].score}`;
+      scoresContainer.appendChild(scoreElement);
+    });
+  }
+
+  handleScore(payload) {
+    const { username, score } = payload;
+
+    if (!(username in this.players)) {
+      console.warn(`[Game] Player <${username}> is unknown`);
+      return;
+    }
+    this.displayScore();
   }
 
   handlePlayerLeft(payload) {

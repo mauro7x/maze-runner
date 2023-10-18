@@ -6,6 +6,9 @@ const topics = {
   // Game normal messages
   POSITION: "position",
 
+  //Scores
+  UPDATE_SCORES: "score",
+
   // Updates for the room
   UPDATES: "update/#",
   UPDATE_PLAYER_JOINED: "update/player_joined",
