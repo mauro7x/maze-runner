@@ -382,5 +382,11 @@ class Game {
 
 console.debug("Configuration:", config);
 
-const gameManager = new GameManager();
+const params = window.location.search;
+console.debug("Window params:", params);
+
+if (params === "?manager=yes") {
+  const gameManager = new GameManager();
+}
+
 const game = new Game();
