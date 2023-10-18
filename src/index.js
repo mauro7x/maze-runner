@@ -1,4 +1,5 @@
 import config from "./config.js";
+import map from "./map.js";
 import {
   JOIN_RES,
   JOIN_REQ,
@@ -75,6 +76,9 @@ class GameManager {
     // Internal state
     this.players = {};
 
+    // Map
+    this.map = map;
+
     // Client
     this.handlers = {
       [JOIN_REQ]: this.handleJoinRequest.bind(this),
@@ -115,6 +119,7 @@ class GameManager {
     const resPayload = {
       username,
       players: this.players,
+      map: this.map,
     };
     console.debug("[GameManager] Join request accepted", resPayload);
     this.client.publish(JOIN_RES, JSON.stringify(resPayload));
@@ -220,9 +225,34 @@ class Game {
 
   drawMap() {
     // Clear canvas
-    mapCanvasC.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
 
-    // TODO: Draw map
+    mapCanvasC.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+    mapCanvasC.beginPath();
+    //Get map size
+    const nRows = this.map.length;
+    const nCols = this.map[0]?.length ?? 0;
+
+    const boundWidth = mapCanvas.width / nCols;
+    const boundHeight = mapCanvas.height / nRows;
+
+    this.map.forEach((row, i) => {
+      row.forEach((symbol, j) => {
+        console.log("Boundary width position being drawn:", j * boundWidth);
+        console.log("Boundary height position being drawn:", i * boundHeight);
+        switch (symbol) {
+          case "-":
+            mapCanvasC.fillStyle = "rgb(255, 0, 255)";
+            mapCanvasC.fillRect(
+              j * boundWidth,
+              i * boundHeight,
+              boundWidth,
+              boundHeight
+            );
+            break;
+        }
+      });
+    });
+    mapCanvasC.closePath();
   }
 
   resetPosition() {
@@ -291,6 +321,9 @@ class Game {
     selfCanvas.addEventListener("mouseleave", this.onMouseLeave.bind(this));
     selfCanvas.addEventListener("mousemove", this.onMouseMove.bind(this));
 
+    // Draw map
+    this.drawMap();
+
     // Draw myself
     this.drawSelf();
 
@@ -321,9 +354,10 @@ class Game {
 
   handleJoinResponse(payload) {
     console.debug("[Game] Join response received", payload);
-    const { username, players } = payload;
+    const { username, players, map } = payload;
     this.username = username;
     this.players = players;
+    this.map = map;
     this.color = players[username].color;
 
     console.debug("[Game] Unsubscribing from JOIN_RES");
@@ -382,11 +416,5 @@ class Game {
 
 console.debug("Configuration:", config);
 
-const params = window.location.search;
-console.debug("Window params:", params);
-
-if (params === "?manager=yes") {
-  const gameManager = new GameManager();
-}
-
+const gameManager = new GameManager();
 const game = new Game();
