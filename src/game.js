@@ -195,14 +195,13 @@ class GameManager {
       });
     });
 
-    //fix the initial position in the middle of the starting zone
+    // Fix the initial position in the middle of the starting zone
     const initialPosition = {
       x: (startingZone.x[0] + startingZone.x[1]) / 2,
       y: (startingZone.y[0] + startingZone.y[1]) / 2,
     };
 
-    //Print map
-    console.log("Initial position: ", initialPosition);
+    // Construct map object
     this.map = {
       data: map,
       initialPosition,
@@ -420,21 +419,18 @@ class Game {
     };
 
     this.position = Game.toScaledPosition(position);
-    console.log("Starting position:", this.position);
-    console.log("Starting zone:", this.map.startingZone);
 
-    //Check if starting in starting zone
+    // Check if starting in starting zone
     if (
       this.map.startingZone.x[0] <= this.position.x &&
       this.position.x <= this.map.startingZone.x[1] &&
       this.map.startingZone.y[0] <= this.position.y &&
       this.position.y <= this.map.startingZone.y[1]
     ) {
-      console.log("Starting in starting zone");
       this.moving = true;
       this.drawSelf();
     } else {
-      console.log("You can't start outside the starting zone");
+      alert("You can't start outside the starting (blue) zone");
       return;
     }
   }
