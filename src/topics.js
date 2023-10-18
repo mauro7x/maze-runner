@@ -9,3 +9,6 @@ export const UPDATES = "update/#";
 export const UPDATE_PLAYER_JOINED = "update/player_joined";
 export const UPDATE_PLAYER_LEFT = "update/player_left";
 export const UPDATE_MAP = "update/map";
+
+// Control plane
+export const KEEPALIVE = "keepalive";

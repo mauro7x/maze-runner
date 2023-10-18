@@ -23,6 +23,7 @@
 - [ ] Posibilidad de cambiar de mapa:
   - [ ] Múltiples mapas v1: preset de mapas hechos por nosotros.
   - [ ] Múltiples mapas v2: generación al azar.
+- [ ] Eliminar jugadores que se van.
 
 ## Infra
 
@@ -33,4 +34,6 @@
 
 ## Presentación
 
-- [ ] Preparar presentación.
+- [ ] Diagrama de arquitectura.
+- [ ] Preparar informe.
+- [ ] Preparar presentación (slides).

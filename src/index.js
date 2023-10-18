@@ -5,6 +5,7 @@ import {
   POSITION,
   UPDATE_PLAYER_JOINED,
   UPDATE_PLAYER_LEFT,
+  KEEPALIVE,
 } from "./topics.js";
 
 // ----------------------------------------------------------------------------
@@ -40,8 +41,26 @@ window.addEventListener("resize", updateCanvasSize);
 // AUX FUNCTIONS
 // ----------------------------------------------------------------------------
 
+function onConnect() {
+  // Create web worker using our "keepAlive()" function
+  this.keepAliveWorker = createWebWorker(keepAlive);
+
+  // Event listener for our Web Worker
+  this.keepAliveWorker.addEventListener("message", (event) => {
+    // Ping our mqtt connection to keep it alive
+    this.client.publish(KEEPALIVE, "ping");
+  });
+
+  // Custom handler
+  this.onConnect();
+}
+
 function onMessage(topic, message) {
   const payload = JSON.parse(message.toString() ?? "");
+
+  // Uncomment for debugging purposes
+  // console.debug("Message received:", { topic, payload });
+
   if (!(topic in this.handlers)) {
     console.warn("Missing handler for message", {
       topic,
@@ -53,23 +72,53 @@ function onMessage(topic, message) {
   this.handlers[topic](payload);
 }
 
+function onClose() {
+  console.log("Client closed");
+  this.keepAliveWorker?.terminate();
+}
+
 function initClient() {
   const { host, port } = config?.emqx;
   const client = mqtt.connect(
-    `ws://${host ?? "localhost"}:${port ?? 8083}/mqtt`
+    `ws://${host ?? "localhost"}:${port ?? 8083}/mqtt`,
+    {
+      keepalive: 0,
+    }
   );
 
   // Initialize handlers
-  client.on("connect", this.onConnect.bind(this));
+  client.on("connect", onConnect.bind(this));
   client.on("message", onMessage.bind(this));
 
   // TODO: Handle these events
   client.on("offline", () => console.log("Client went offline"));
   client.on("reconnect", () => console.log("Client reconnected"));
   client.on("disconnect", () => console.log("Client disconnected"));
-  client.on("close", () => console.log("Client closed"));
+  client.on("close", onClose.bind(this));
+  client.on("error", () => console.error("Client error"));
 
   return client;
+}
+
+// ----------------------------------------------------------------------------
+// KEEP ALIVE WEIRD HACKFIX
+// https://github.com/mqttjs/MQTT.js/issues/1257#issuecomment-987094416
+// ----------------------------------------------------------------------------
+
+// This Web Worker logic will notify our application to ping our MQTT connection to keep it alive.
+function keepAlive() {
+  setInterval(() => {
+    self.postMessage("keep-alive"); // will post to our application, doesn't need to be named 'keep-alive' can be anything
+  }, 15000); // every 15 seconds
+}
+
+// Creates a web worker via blob (instead of file)
+function createWebWorker(func) {
+  return new Worker(
+    URL.createObjectURL(
+      new Blob(["(" + func.toString() + ")()"], { type: "text/javascript" })
+    )
+  );
 }
 
 // ----------------------------------------------------------------------------
@@ -84,6 +133,7 @@ class GameManager {
     // Client
     this.handlers = {
       [JOIN_REQ]: this.handleJoinRequest.bind(this),
+      [UPDATE_PLAYER_LEFT]: this.handlePlayerLeft.bind(this),
     };
     this.client = initClient.bind(this)();
   }
@@ -132,13 +182,30 @@ class GameManager {
     };
     console.debug("[GameManager] Broadcasting new joined player", resPayload);
     this.client.publish(UPDATE_PLAYER_JOINED, JSON.stringify(broadcastPayload));
+
+    console.log(`[GameManager] Player <${username}> connected`);
+  }
+
+  handlePlayerLeft(payload) {
+    const { username } = payload;
+
+    if (!(username in this.players)) {
+      console.warn(`[GameManager] Player <${username}> is unknown`);
+      return;
+    }
+
+    console.log(`[GameManager] Player <${username}> disconnected`);
+
+    // Delete player that left
+    delete this.players[username];
   }
 
   // Callbacks
 
   onConnect() {
     console.debug("[GameManager] Client connected");
-    this.client.subscribe([JOIN_REQ]);
+    const topicsToSubscribe = Object.keys(this.handlers);
+    this.client.subscribe(topicsToSubscribe);
   }
 }
 
@@ -246,6 +313,7 @@ class Game {
 
     this.moving = true;
     this.position = Game.toScaledPosition(position);
+    this.drawSelf();
   }
 
   onMouseUp(event) {
@@ -322,6 +390,20 @@ class Game {
     this.client.publish(JOIN_REQ, JSON.stringify(payload));
   }
 
+  // TODO: This is not working!
+  exitGame(event) {
+    console.error("Exit game called");
+
+    event.preventDefault(); // Avoid browser from closing
+
+    const payload = { username: this.username };
+    client.publish(UPDATE_PLAYER_LEFT, JSON.stringify(payload));
+    client.end();
+
+    // Continue closing the browser window
+    return null;
+  }
+
   // Handlers
 
   handleJoinResponse(payload) {
@@ -333,6 +415,9 @@ class Game {
 
     console.debug("[Game] Unsubscribing from JOIN_RES");
     this.client.unsubscribe(JOIN_RES);
+
+    console.debug("[Game] Adding listener for exitGame");
+    window.addEventListener("beforeunload", this.exitGame.bind(this));
 
     console.debug("[Game] Creating needed subscriptions");
     this.client.subscribe([POSITION, UPDATE_PLAYER_JOINED, UPDATE_PLAYER_LEFT]);
@@ -365,6 +450,11 @@ class Game {
 
   handlePlayerLeft(payload) {
     const { username } = payload;
+
+    if (!(username in this.players)) {
+      console.warn(`[Game] Player <${username}> is unknown`);
+      return;
+    }
 
     // Ignore if its myself
     if (username === this.username) return;
