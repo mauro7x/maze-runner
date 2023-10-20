@@ -241,6 +241,9 @@ class GameManager {
     };
     this.players[username] = player;
 
+    //add a unique score to each player
+    this.players[username].score = 0;
+
     // Response
     const resPayload = {
       username,
@@ -446,10 +449,13 @@ class Game {
   }
 
   updateScore() {
-    this.score += config.pointWhenSucces;
+    this.players[this.username].score += config.pointWhenSucces;
     this.client.publish(
       UPDATE_SCORES,
-      JSON.stringify({ username: this.username, score: this.score })
+      JSON.stringify({
+        username: this.username,
+        score: this.players[this.username].score,
+      })
     );
   }
 
@@ -460,6 +466,8 @@ class Game {
     this.stopMoving();
     // Update score
     this.updateScore();
+    // Display score
+    this.displayScore();
   }
 
   onMouseDown(event) {
@@ -592,6 +600,9 @@ class Game {
     // Draw other players in loop
     setInterval(() => this.drawPlayers(), config.timeMs.drawOthersEvery);
 
+    // Display scores
+    this.displayScore();
+
     // Publish position
     setInterval(() => {
       if (this.moving) {
@@ -690,11 +701,15 @@ class Game {
     const scoresContainer = document.getElementById("scores-container");
     // Clear the previous scores
     scoresContainer.innerHTML = "";
-
+    console.log(this.players);
     // Display each player's score
     Object.keys(this.players).forEach((username) => {
       const scoreElement = document.createElement("p");
-      scoreElement.textContent = `${username}: Score - ${this.players[username].score}`;
+      const score =
+        this.players[username].score !== undefined
+          ? this.players[username].score
+          : 0;
+      scoreElement.textContent = `${username}: Score - ${score}`;
       scoresContainer.appendChild(scoreElement);
     });
   }
@@ -706,6 +721,7 @@ class Game {
       console.warn(`[Game] Player <${username}> is unknown`);
       return;
     }
+    console.log(`[Game] Player <${username}> score updated to ${score}`);
     this.displayScore();
   }
 
@@ -724,6 +740,11 @@ class Game {
 
     // Delete player that left
     delete this.players[username];
+
+    //delete the score of the player that left
+    const scoresContainer = document.getElementById("scores-container");
+    scoresContainer.innerHTML = "";
+    this.displayScore();
   }
 
   // Callbacks
