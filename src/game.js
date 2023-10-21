@@ -12,6 +12,7 @@ console.debug("Configuration:", config);
 
 // Parse URL
 const url = new URL(window.location.href);
+const usernameParam = url.searchParams.get("username");
 const room = url.searchParams.get("room");
 const owner = url.searchParams.get("owner");
 
@@ -31,7 +32,7 @@ const {
   UPDATE_PLAYER_LEFT,
   USED_ROOM_REQ,
   USED_ROOM_RES,
-  UPDATE_SCORES,
+  SCORE,
 } = generateTopicsForRoom(room);
 
 // ----------------------------------------------------------------------------
@@ -112,12 +113,12 @@ function initClient() {
   // Initialize handlers
   client.on("connect", onConnect.bind(this));
   client.on("message", onMessage.bind(this));
+  client.on("close", onClose.bind(this));
 
   // TODO: Handle these events
   client.on("offline", () => console.log("Client went offline"));
   client.on("reconnect", () => console.log("Client reconnected"));
   client.on("disconnect", () => console.log("Client disconnected"));
-  client.on("close", onClose.bind(this));
   client.on("error", () => console.error("Client error"));
 
   return client;
@@ -165,6 +166,7 @@ class GameManager {
     this.handlers = {
       [JOIN_REQ]: this.handleJoinRequest.bind(this),
       [UPDATE_PLAYER_LEFT]: this.handlePlayerLeft.bind(this),
+      [SCORE]: this.handleScore.bind(this),
     };
     this.client = initClient.bind(this)();
   }
@@ -177,6 +179,18 @@ class GameManager {
   }
 
   // Handlers
+
+  handleScore(payload) {
+    const { username, score } = payload;
+
+    if (!(username in this.players)) {
+      console.warn(`[GameManager] Player <${username}> is unknown`);
+      return;
+    }
+
+    this.players[username].score = score;
+    console.log(`[GameManager] Player <${username}> score updated to ${score}`);
+  }
 
   handleJoinRequest(payload) {
     console.debug("[GameManager] Join request received", payload);
@@ -194,21 +208,21 @@ class GameManager {
     // Create player
     const player = {
       color: this.getRandomColor(),
+      score: 0,
     };
-    this.players[username] = player;
 
-    //add a unique score to each player
-    this.players[username].score = 0;
+    // Save it
+    this.players[username] = player;
 
     // Response
     const resPayload = {
       username,
       players: this.players,
       map: this.map,
-      score: 0,
     };
-    console.debug("[GameManager] Join request accepted", resPayload);
+
     this.client.publish(JOIN_RES, JSON.stringify(resPayload));
+    console.debug("[GameManager] Join request accepted", resPayload);
 
     // Broadcast new player
     const broadcastPayload = {
@@ -255,6 +269,7 @@ class Game {
     this.color = null;
     this.map = null;
     this.score = 0;
+
     // Optimization
     this.lastPublishedPosition = null;
 
@@ -264,7 +279,7 @@ class Game {
       [POSITION]: this.handlePosition.bind(this),
       [UPDATE_PLAYER_JOINED]: this.handlePlayerJoined.bind(this),
       [UPDATE_PLAYER_LEFT]: this.handlePlayerLeft.bind(this),
-      [UPDATE_SCORES]: this.handleScore.bind(this),
+      [SCORE]: this.handleScore.bind(this),
     };
     this.client = initClient.bind(this)();
   }
@@ -404,71 +419,24 @@ class Game {
     );
   }
 
-  updateScore() {
-    this.players[this.username].score += config.pointWhenSucces;
-    this.client.publish(
-      UPDATE_SCORES,
-      JSON.stringify({
-        username: this.username,
-        score: this.players[this.username].score,
-      })
-    );
-  }
+  displayScores() {
+    // Create a sorted scores array
+    const scores = Object.entries(this.players).map(([username, player]) => ({
+      username,
+      score: player.score ?? 0,
+    }));
+    scores.sort((a, b) => b.score - a.score);
 
-  checkWinningZone() {
-    if (!this.map.hitsWinningZone(this.position)) {
-      return;
-    }
-    this.stopMoving();
-    // Update score
-    this.updateScore();
-    // Display score
-    this.displayScore();
-  }
+    // Get the HTML element and clear previous values
+    const scoreboardListEl = document.getElementById("scoreboard-list");
+    scoreboardListEl.innerHTML = "";
 
-  onMouseDown(event) {
-    const position = Game.normalize({
-      x: event.offsetX,
-      y: event.offsetY,
+    // Display each player's score
+    scores.forEach(({ username, score }) => {
+      const scoreListEl = document.createElement("li");
+      scoreListEl.textContent = `${username}: ${score}`;
+      scoreboardListEl.appendChild(scoreListEl);
     });
-
-    if (!this.map.isStartingZone(position)) {
-      alert("You cannot start outside the starting zone");
-      return;
-    }
-
-    this.moving = true;
-    this.position = position;
-    this.drawSelf();
-  }
-
-  onMouseUp(event) {
-    if (this.moving) {
-      this.stopMoving();
-    }
-  }
-
-  onMouseLeave(event) {
-    if (this.moving) {
-      this.stopMoving();
-    }
-  }
-
-  onMouseMove(event) {
-    if (!this.moving) return;
-
-    const position = Game.normalize({
-      x: event.offsetX,
-      y: event.offsetY,
-    });
-
-    if (this.map.hitsWall(position)) {
-      this.stopMoving();
-      return;
-    }
-
-    this.position = position;
-    this.drawSelf();
   }
 
   // Misc functions
@@ -553,6 +521,36 @@ class Game {
     };
   }
 
+  shouldIgnoreMessage(username) {
+    if (!(username in this.players)) {
+      console.warn(`[Game] Player <${username}> is unknown`);
+      return true;
+    }
+
+    // Ignore if its myself
+    if (username === this.username) {
+      return true;
+    }
+
+    return false;
+  }
+
+  updateScore() {
+    this.players[this.username].score += config.pointWhenSucces;
+
+    // Broadcast our new score
+    this.client.publish(
+      SCORE,
+      JSON.stringify({
+        username: this.username,
+        score: this.players[this.username].score,
+      })
+    );
+
+    // Display
+    this.displayScores();
+  }
+
   stopMoving() {
     this.moving = false;
     this.position = null;
@@ -605,31 +603,23 @@ class Game {
       }.bind(this)
     );
 
+    // Display scores
+    this.displayScores();
+
     // Draw other players in loop
     setInterval(() => this.drawPlayers(), config.timeMs.drawOthersEvery);
 
-    // Display scores
-    this.displayScore();
-
-    // Publish position
+    // Publish position in loop
     setInterval(() => {
       if (this.moving) {
         this.publishPosition();
       }
     }, config.timeMs.publishPositionEvery);
-
-    // Check if we are in the winning zone
-    setInterval(() => {
-      if (this.moving) {
-        this.checkWinningZone();
-      }
-    }, config.timeMs.checkWinEvery);
   }
 
   joinGame() {
     const payload = {
-      username: "Username",
-      score: 0,
+      username: usernameParam,
     };
 
     console.debug("[Game] Subscribing to JOIN_RES");
@@ -650,16 +640,69 @@ class Game {
     return null;
   }
 
+  // Mouse handlers
+
+  onMouseDown(event) {
+    const position = Game.normalize({
+      x: event.offsetX,
+      y: event.offsetY,
+    });
+
+    if (!this.map.isStartingZone(position)) {
+      alert("You cannot start outside the starting zone");
+      return;
+    }
+
+    this.moving = true;
+    this.position = position;
+    this.drawSelf();
+  }
+
+  onMouseUp(event) {
+    if (this.moving) {
+      this.stopMoving();
+    }
+  }
+
+  onMouseLeave(event) {
+    if (this.moving) {
+      this.stopMoving();
+    }
+  }
+
+  onMouseMove(event) {
+    if (!this.moving) return;
+
+    const position = Game.normalize({
+      x: event.offsetX,
+      y: event.offsetY,
+    });
+
+    if (this.map.hitsWall(position)) {
+      this.stopMoving();
+      return;
+    }
+
+    if (this.map.hitsWinningZone(position)) {
+      this.stopMoving();
+      this.updateScore();
+      return;
+    }
+
+    this.position = position;
+    this.drawSelf();
+  }
+
   // Handlers
 
   handleJoinResponse(payload) {
     console.debug("[Game] Join response received", payload);
-    const { username, players, map, score } = payload;
+    const { username, players, map } = payload;
     this.username = username;
     this.players = players;
     this.map = Game.processMap(map);
     this.color = players[username].color;
-    this.score = score;
+    this.score = 0;
 
     console.debug("[Game] Unsubscribing from JOIN_RES");
     this.client.unsubscribe(JOIN_RES);
@@ -670,9 +713,9 @@ class Game {
     console.debug("[Game] Creating needed subscriptions");
     this.client.subscribe([
       POSITION,
+      SCORE,
       UPDATE_PLAYER_JOINED,
       UPDATE_PLAYER_LEFT,
-      UPDATE_SCORES,
     ]);
 
     console.debug("[Game] Initializing game");
@@ -692,6 +735,16 @@ class Game {
     this.players[username].moving = moving;
   }
 
+  handleScore(payload) {
+    const { username, score } = payload;
+    if (this.shouldIgnoreMessage(username)) return;
+
+    this.players[username].score = score;
+    this.displayScores();
+
+    console.log(`[Game] Player <${username}> score updated to ${score}`);
+  }
+
   handlePlayerJoined(payload) {
     const { username, player, score } = payload;
 
@@ -705,56 +758,23 @@ class Game {
       moving: false,
       score: 0,
     };
-  }
 
-  displayScore() {
-    const scoresContainer = document.getElementById("scores-container");
-    // Clear the previous scores
-    scoresContainer.innerHTML = "";
-    console.log(this.players);
-    // Display each player's score
-    Object.keys(this.players).forEach((username) => {
-      const scoreElement = document.createElement("p");
-      const score =
-        this.players[username].score !== undefined
-          ? this.players[username].score
-          : 0;
-      scoreElement.textContent = `${username}: Score - ${score}`;
-      scoresContainer.appendChild(scoreElement);
-    });
-  }
+    this.displayScores();
 
-  handleScore(payload) {
-    const { username, score } = payload;
-
-    if (!(username in this.players)) {
-      console.warn(`[Game] Player <${username}> is unknown`);
-      return;
-    }
-    console.log(`[Game] Player <${username}> score updated to ${score}`);
-    this.displayScore();
+    console.log(`[Game] Player <${username}> connected!`);
   }
 
   handlePlayerLeft(payload) {
     const { username } = payload;
-
-    if (!(username in this.players)) {
-      console.warn(`[Game] Player <${username}> is unknown`);
-      return;
-    }
-
-    // Ignore if its myself
-    if (username === this.username) return;
-
-    console.log(`[Game] Player <${username}> disconnected`);
+    if (this.shouldIgnoreMessage(username)) return;
 
     // Delete player that left
     delete this.players[username];
 
-    //delete the score of the player that left
-    const scoresContainer = document.getElementById("scores-container");
-    scoresContainer.innerHTML = "";
-    this.displayScore();
+    // Re-display scores
+    this.displayScores();
+
+    console.log(`[Game] Player <${username}> disconnected`);
   }
 
   // Callbacks

@@ -6,7 +6,6 @@ export default {
   timeMs: {
     publishPositionEvery: 50,
     drawOthersEvery: 50,
-    checkWinEvery: 50,
   },
   radius: 0.02,
   aspectRatio: 4 / 3,
