@@ -14,4 +14,6 @@ export default {
     startingZone: "rgb(0, 0, 255)",
     winningZone: "rgb(0, 255, 0)",
   },
+
+  pointWhenSucces: 50,
 };

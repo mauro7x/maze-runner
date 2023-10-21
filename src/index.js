@@ -33,9 +33,10 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    const username = encodeURIComponent(usernameInput.value);
     const roomName = encodeURIComponent(joinRoomInput.value);
 
-    const url = `game.html?room=${roomName}`;
+    const url = `game.html?username=${username}&room=${roomName}`;
     window.location.replace(url);
   });
 
@@ -46,11 +47,12 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    const username = encodeURIComponent(usernameInput.value);
     const roomName = getRandomRoomName();
 
     // TODO: Validate room name
 
-    const url = `game.html?room=${roomName}&owner=yes`;
+    const url = `game.html?username=${username}&room=${roomName}&owner=yes`;
     window.location.replace(url);
   });
 
