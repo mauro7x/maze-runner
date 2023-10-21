@@ -123,55 +123,6 @@ function initClient() {
   return client;
 }
 
-function processMap(map) {
-  const nRows = map.length;
-  const nCols = map[0]?.length ?? 0;
-
-  const getSymbol = (position) => {
-    const row = Math.floor(position.y * nRows);
-    const col = Math.floor(position.x * nCols);
-
-    return map[row][col];
-  };
-
-  const countSymbol = (position, symbol) => {
-    const xMax = position.x + Game.xRadius;
-    const xMin = position.x - Game.xRadius;
-    const yMax = position.y + Game.yRadius;
-    const yMin = position.y - Game.yRadius;
-
-    const points = [
-      [xMin, yMin],
-      [xMin, yMax],
-      [xMax, yMin],
-      [xMax, yMax],
-    ];
-
-    let count = 0;
-    points.forEach(([x, y]) => {
-      if (getSymbol({ x, y }) === symbol) {
-        count += 1;
-      }
-    });
-
-    return count;
-  };
-
-  return {
-    raw: map,
-    nRows,
-    nCols,
-    boundaries: {
-      wall: Game.parseRanges(map, "-"),
-      startingZone: Game.parseRanges(map, "I"),
-      winningZone: Game.parseRanges(map, "W"),
-    },
-    hitsWall: (position) => countSymbol(position, "-") > 0,
-    hitsWinningZone: (position) => countSymbol(position, "W") > 0,
-    isStartingZone: (position) => getSymbol(position) === "I",
-  };
-}
-
 // ----------------------------------------------------------------------------
 // KEEP ALIVE WEIRD HACKFIX
 // https://github.com/mqttjs/MQTT.js/issues/1257#issuecomment-987094416
@@ -202,8 +153,13 @@ class GameManager {
     // Internal state
     this.players = {};
 
-    // Map
-    this.map = map;
+    // Map (TODO: load it from somewhere else)
+    this.map = {
+      data: map,
+      nRows: map.length,
+      nCols: map[0]?.length ?? 0,
+      radius: 0.02,
+    };
 
     // Client
     this.handlers = {
@@ -290,9 +246,6 @@ class GameManager {
 }
 
 class Game {
-  static xRadius = config.radius / config.aspectRatio;
-  static yRadius = config.radius;
-
   constructor() {
     // Internal state
     this.players = {};
@@ -340,15 +293,18 @@ class Game {
     };
   }
 
-  static drawPlayer(context, position, color) {
-    const radius = Game.denormalize({ x: Game.xRadius, y: Game.yRadius });
+  static drawPlayer(context, position, color, radius) {
+    const scaledRadius = Game.denormalize({
+      x: radius.x,
+      y: radius.y,
+    });
 
     context.beginPath();
     context.ellipse(
       position.x,
       position.y,
-      radius.x,
-      radius.y,
+      scaledRadius.x,
+      scaledRadius.y,
       0,
       Math.PI * 2,
       false
@@ -386,7 +342,7 @@ class Game {
     // Scale position and draw myself
     const position = Game.denormalize(this.position);
     // TODO: Add some distinctive to know its myself
-    Game.drawPlayer(selfCanvasC, position, this.color);
+    Game.drawPlayer(selfCanvasC, position, this.color, this.map.radius);
   }
 
   drawPlayers() {
@@ -406,7 +362,7 @@ class Game {
       // Compute position (scaling)
       const position = Game.denormalize(player.position);
 
-      Game.drawPlayer(playersCanvasC, position, player.color);
+      Game.drawPlayer(playersCanvasC, position, player.color, this.map.radius);
     });
   }
 
@@ -545,6 +501,58 @@ class Game {
     return ranges;
   }
 
+  static processMap(map) {
+    const radius = {
+      x: map.radius / config.aspectRatio,
+      y: map.radius,
+    };
+
+    const getSymbol = (position) => {
+      const x = Math.max(position.x, 0);
+      const y = Math.max(position.y, 0);
+      const row = Math.min(Math.floor(y * map.nRows), map.nRows - 1);
+      const col = Math.min(Math.floor(x * map.nCols), map.nCols - 1);
+
+      return map.data[row][col];
+    };
+
+    const countSymbol = (position, symbol) => {
+      const xMax = position.x + radius.x;
+      const xMin = position.x - radius.x;
+      const yMax = position.y + radius.y;
+      const yMin = position.y - radius.y;
+
+      const points = [
+        [xMin, yMin],
+        [xMin, yMax],
+        [xMax, yMin],
+        [xMax, yMax],
+      ];
+
+      let count = 0;
+      points.forEach(([x, y]) => {
+        if (getSymbol({ x, y }) === symbol) {
+          count += 1;
+        }
+      });
+
+      return count;
+    };
+
+    return {
+      ...map,
+      radius,
+      boundaries: {
+        wall: Game.parseRanges(map.data, "-"),
+        startingZone: Game.parseRanges(map.data, "I"),
+        winningZone: Game.parseRanges(map.data, "W"),
+      },
+      hitsWall: (position) => countSymbol(position, "-") > 0,
+      hitsWinningZone: (position) => countSymbol(position, "W") > 0,
+      isStartingZone: (position) => getSymbol(position) === "I",
+    };
+  }
+
   stopMoving() {
     this.moving = false;
     this.position = null;
@@ -643,12 +651,13 @@ class Game {
   }
 
   // Handlers
+
   handleJoinResponse(payload) {
     console.debug("[Game] Join response received", payload);
     const { username, players, map, score } = payload;
     this.username = username;
     this.players = players;
-    this.map = processMap(map);
+    this.map = Game.processMap(map);
     this.color = players[username].color;
     this.score = score;
 
@@ -671,7 +680,7 @@ class Game {
   }
 
   handlePosition(payload) {
-    const { username, position } = payload;
+    const { username, position, moving } = payload;
     if (!(username in this.players) || username === this.username) {
       if (username !== this.username) {
         console.log("I don't know the user", username);
@@ -680,6 +689,7 @@ class Game {
     }
 
     this.players[username].position = position;
+    this.players[username].moving = moving;
   }
 
   handlePlayerJoined(payload) {
