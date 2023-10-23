@@ -24,7 +24,6 @@ const {
   JOIN_RES,
   KEEPALIVE,
   POSITION,
-  UPDATES,
   UPDATE_MAP,
   UPDATE_PLAYER_JOINED,
   UPDATE_PLAYER_LEFT,
@@ -61,6 +60,23 @@ function updateCanvasSize() {
 
 window.addEventListener("load", updateCanvasSize);
 window.addEventListener("resize", updateCanvasSize);
+
+// Map navigation buttons
+function showMapNavigationButtons(gameManager) {
+  const mapNavigationContainer = document.getElementById("map-navigation");
+  const nextMapButton = document.getElementById("next-map-button");
+  const previousMapButton = document.getElementById("previous-map-button");
+
+  mapNavigationContainer.style.display = "flex";
+
+  nextMapButton.addEventListener("click", () => {
+    gameManager.nextMap();
+  });
+
+  previousMapButton.addEventListener("click", () => {
+    gameManager.previousMap();
+  });
+}
 
 // ----------------------------------------------------------------------------
 // AUX FUNCTIONS
@@ -186,7 +202,7 @@ class GameManager {
     // Internal state
     this.players = {};
     this.nMaps = maps.length();
-    this.currentMapIndex = 1;
+    this.currentMapIndex = 0;
 
     // Client
     this.handlers = {
@@ -202,6 +218,24 @@ class GameManager {
     const g = Math.floor(Math.random() * 256);
     const b = Math.floor(Math.random() * 256);
     return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  nextMap() {
+    this.currentMapIndex = (this.currentMapIndex + 1) % this.nMaps;
+    this.broadcastMap();
+  }
+
+  previousMap() {
+    this.currentMapIndex = (this.currentMapIndex - 1 + this.nMaps) % this.nMaps;
+    this.broadcastMap();
+  }
+
+  broadcastMap() {
+    console.log("[GameManager] Broadcasting new map", this.currentMapIndex);
+    this.client.publish(
+      UPDATE_MAP,
+      JSON.stringify({ currentMapIndex: this.currentMapIndex })
+    );
   }
 
   // Handlers
@@ -304,9 +338,10 @@ class Game {
     this.handlers = {
       [JOIN_RES]: this.handleJoinResponse.bind(this),
       [POSITION]: this.handlePosition.bind(this),
+      [SCORE]: this.handleScore.bind(this),
       [UPDATE_PLAYER_JOINED]: this.handlePlayerJoined.bind(this),
       [UPDATE_PLAYER_LEFT]: this.handlePlayerLeft.bind(this),
-      [SCORE]: this.handleScore.bind(this),
+      [UPDATE_MAP]: this.handleNewMap.bind(this),
     };
     this.client = initClient.bind(this)();
   }
@@ -383,7 +418,6 @@ class Game {
 
     // Scale position and draw myself
     const position = Game.denormalize(this.position);
-    // TODO: Add some distinctive to know its myself
     Game.drawPlayer(selfCanvasC, position, this.color, this.map.radius);
   }
 
@@ -613,6 +647,18 @@ class Game {
     this.lastPublishedPosition = this.position;
   }
 
+  updateMap(mapIndex) {
+    const currentMap = this.maps.get(mapIndex);
+    this.map = Game.processMap(currentMap);
+
+    // Update HTML
+    const mapTextEl = document.getElementById("map-text");
+    mapTextEl.innerText = `Map: ${mapIndex + 1}`;
+
+    // Draw
+    this.drawMap();
+  }
+
   initGame() {
     selfCanvas.addEventListener("mousedown", this.onMouseDown.bind(this));
     selfCanvas.addEventListener("mouseup", this.onMouseUp.bind(this));
@@ -727,10 +773,9 @@ class Game {
     const { username, players, currentMapIndex } = payload;
     this.username = username;
     this.players = players;
-    const currentMap = this.maps.get(currentMapIndex);
-    this.map = Game.processMap(currentMap);
     this.color = players[username].color;
     this.score = 0;
+    this.updateMap(currentMapIndex);
 
     console.debug("[Game] Unsubscribing from JOIN_RES");
     this.client.unsubscribe(JOIN_RES);
@@ -742,6 +787,7 @@ class Game {
     this.client.subscribe([
       POSITION,
       SCORE,
+      UPDATE_MAP,
       UPDATE_PLAYER_JOINED,
       UPDATE_PLAYER_LEFT,
     ]);
@@ -805,6 +851,12 @@ class Game {
     console.log(`[Game] Player <${username}> disconnected`);
   }
 
+  handleNewMap(payload) {
+    const { currentMapIndex } = payload;
+    console.log("[Game] New map received", currentMapIndex);
+    this.updateMap(currentMapIndex);
+  }
+
   // Callbacks
 
   onConnect() {
@@ -821,6 +873,7 @@ const maps = new Maps();
 
 if (owner === "yes") {
   const gameManager = new GameManager(maps);
+  showMapNavigationButtons(gameManager);
 }
 
 const game = new Game(maps);
