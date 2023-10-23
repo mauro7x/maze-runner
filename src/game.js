@@ -1,8 +1,6 @@
 import config from "./config.js";
 import { generateTopicsForRoom } from "./topics.js";
-
-// TODO: Create more maps? Create a loading map mechanism?
-import map from "./map.js";
+import rawMaps from "./maps.js";
 
 // ----------------------------------------------------------------------------
 // INITIAL CONFIGURATION
@@ -149,18 +147,46 @@ function createWebWorker(func) {
 // CLASSES DEFINITION
 // ----------------------------------------------------------------------------
 
-class GameManager {
+class Maps {
   constructor() {
+    this.initMaps();
+  }
+
+  initMaps() {
+    const parsedMaps = [];
+
+    rawMaps.forEach(({ data, radius }) => {
+      parsedMaps.push({
+        data,
+        radius,
+        nRows: data.length,
+        nCols: data[0]?.length ?? 0,
+      });
+    });
+
+    this.maps = parsedMaps;
+  }
+
+  length() {
+    return this.maps.length;
+  }
+
+  get(index) {
+    if (index < 0 || index >= this.maps.length) {
+      console.error(`[Maps] Index out of range: ${index}`);
+      return {};
+    }
+
+    return this.maps[index];
+  }
+}
+
+class GameManager {
+  constructor(maps) {
     // Internal state
     this.players = {};
-
-    // Map (TODO: load it from somewhere else)
-    this.map = {
-      data: map,
-      nRows: map.length,
-      nCols: map[0]?.length ?? 0,
-      radius: 0.02,
-    };
+    this.nMaps = maps.length();
+    this.currentMapIndex = 1;
 
     // Client
     this.handlers = {
@@ -218,7 +244,7 @@ class GameManager {
     const resPayload = {
       username,
       players: this.players,
-      map: this.map,
+      currentMapIndex: this.currentMapIndex,
     };
 
     this.client.publish(JOIN_RES, JSON.stringify(resPayload));
@@ -260,14 +286,15 @@ class GameManager {
 }
 
 class Game {
-  constructor() {
+  constructor(maps) {
     // Internal state
     this.players = {};
+    this.maps = maps;
+    this.map = null;
     this.username = null;
     this.moving = false;
     this.position = null;
     this.color = null;
-    this.map = null;
     this.score = 0;
 
     // Optimization
@@ -697,10 +724,11 @@ class Game {
 
   handleJoinResponse(payload) {
     console.debug("[Game] Join response received", payload);
-    const { username, players, map } = payload;
+    const { username, players, currentMapIndex } = payload;
     this.username = username;
     this.players = players;
-    this.map = Game.processMap(map);
+    const currentMap = this.maps.get(currentMapIndex);
+    this.map = Game.processMap(currentMap);
     this.color = players[username].color;
     this.score = 0;
 
@@ -789,8 +817,10 @@ class Game {
 // INSTANCES CREATION
 // ----------------------------------------------------------------------------
 
+const maps = new Maps();
+
 if (owner === "yes") {
-  const gameManager = new GameManager();
+  const gameManager = new GameManager(maps);
 }
 
-const game = new Game();
+const game = new Game(maps);
