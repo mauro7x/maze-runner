@@ -13,7 +13,7 @@ body {
 
 .game-container {
   width: 80%;
-  background-color: pink;
+  /* background-color: pink; */
   display: flex;
   justify-content: center;
   align-items: center;
@@ -41,4 +41,14 @@ body {
 #map-canvas {
   background-color: white;
   z-index: 0;
+}
+
+#map-navigation {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+}
+
+.map-navigation-button {
+  width: 45%;
 }

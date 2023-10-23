@@ -1,8 +1,6 @@
 import config from "./config.js";
 import { generateTopicsForRoom } from "./topics.js";
-
-// TODO: Create more maps? Create a loading map mechanism?
-import map from "./map.js";
+import rawMaps from "./maps.js";
 
 // ----------------------------------------------------------------------------
 // INITIAL CONFIGURATION
@@ -26,7 +24,6 @@ const {
   JOIN_RES,
   KEEPALIVE,
   POSITION,
-  UPDATES,
   UPDATE_MAP,
   UPDATE_PLAYER_JOINED,
   UPDATE_PLAYER_LEFT,
@@ -63,6 +60,23 @@ function updateCanvasSize() {
 
 window.addEventListener("load", updateCanvasSize);
 window.addEventListener("resize", updateCanvasSize);
+
+// Map navigation buttons
+function showMapNavigationButtons(gameManager) {
+  const mapNavigationContainer = document.getElementById("map-navigation");
+  const nextMapButton = document.getElementById("next-map-button");
+  const previousMapButton = document.getElementById("previous-map-button");
+
+  mapNavigationContainer.style.display = "flex";
+
+  nextMapButton.addEventListener("click", () => {
+    gameManager.nextMap();
+  });
+
+  previousMapButton.addEventListener("click", () => {
+    gameManager.previousMap();
+  });
+}
 
 // ----------------------------------------------------------------------------
 // AUX FUNCTIONS
@@ -149,18 +163,46 @@ function createWebWorker(func) {
 // CLASSES DEFINITION
 // ----------------------------------------------------------------------------
 
-class GameManager {
+class Maps {
   constructor() {
+    this.initMaps();
+  }
+
+  initMaps() {
+    const parsedMaps = [];
+
+    rawMaps.forEach(({ data, radius }) => {
+      parsedMaps.push({
+        data,
+        radius,
+        nRows: data.length,
+        nCols: data[0]?.length ?? 0,
+      });
+    });
+
+    this.maps = parsedMaps;
+  }
+
+  length() {
+    return this.maps.length;
+  }
+
+  get(index) {
+    if (index < 0 || index >= this.maps.length) {
+      console.error(`[Maps] Index out of range: ${index}`);
+      return {};
+    }
+
+    return this.maps[index];
+  }
+}
+
+class GameManager {
+  constructor(maps) {
     // Internal state
     this.players = {};
-
-    // Map (TODO: load it from somewhere else)
-    this.map = {
-      data: map,
-      nRows: map.length,
-      nCols: map[0]?.length ?? 0,
-      radius: 0.02,
-    };
+    this.nMaps = maps.length();
+    this.currentMapIndex = 0;
 
     // Client
     this.handlers = {
@@ -176,6 +218,24 @@ class GameManager {
     const g = Math.floor(Math.random() * 256);
     const b = Math.floor(Math.random() * 256);
     return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  nextMap() {
+    this.currentMapIndex = (this.currentMapIndex + 1) % this.nMaps;
+    this.broadcastMap();
+  }
+
+  previousMap() {
+    this.currentMapIndex = (this.currentMapIndex - 1 + this.nMaps) % this.nMaps;
+    this.broadcastMap();
+  }
+
+  broadcastMap() {
+    console.log("[GameManager] Broadcasting new map", this.currentMapIndex);
+    this.client.publish(
+      UPDATE_MAP,
+      JSON.stringify({ currentMapIndex: this.currentMapIndex })
+    );
   }
 
   // Handlers
@@ -218,7 +278,7 @@ class GameManager {
     const resPayload = {
       username,
       players: this.players,
-      map: this.map,
+      currentMapIndex: this.currentMapIndex,
     };
 
     this.client.publish(JOIN_RES, JSON.stringify(resPayload));
@@ -260,14 +320,15 @@ class GameManager {
 }
 
 class Game {
-  constructor() {
+  constructor(maps) {
     // Internal state
     this.players = {};
+    this.maps = maps;
+    this.map = null;
     this.username = null;
     this.moving = false;
     this.position = null;
     this.color = null;
-    this.map = null;
     this.score = 0;
 
     // Optimization
@@ -277,9 +338,10 @@ class Game {
     this.handlers = {
       [JOIN_RES]: this.handleJoinResponse.bind(this),
       [POSITION]: this.handlePosition.bind(this),
+      [SCORE]: this.handleScore.bind(this),
       [UPDATE_PLAYER_JOINED]: this.handlePlayerJoined.bind(this),
       [UPDATE_PLAYER_LEFT]: this.handlePlayerLeft.bind(this),
-      [SCORE]: this.handleScore.bind(this),
+      [UPDATE_MAP]: this.handleNewMap.bind(this),
     };
     this.client = initClient.bind(this)();
   }
@@ -356,7 +418,6 @@ class Game {
 
     // Scale position and draw myself
     const position = Game.denormalize(this.position);
-    // TODO: Add some distinctive to know its myself
     Game.drawPlayer(selfCanvasC, position, this.color, this.map.radius);
   }
 
@@ -586,6 +647,18 @@ class Game {
     this.lastPublishedPosition = this.position;
   }
 
+  updateMap(mapIndex) {
+    const currentMap = this.maps.get(mapIndex);
+    this.map = Game.processMap(currentMap);
+
+    // Update HTML
+    const mapTextEl = document.getElementById("map-text");
+    mapTextEl.innerText = `Map: ${mapIndex + 1}`;
+
+    // Draw
+    this.drawMap();
+  }
+
   initGame() {
     selfCanvas.addEventListener("mousedown", this.onMouseDown.bind(this));
     selfCanvas.addEventListener("mouseup", this.onMouseUp.bind(this));
@@ -697,12 +770,12 @@ class Game {
 
   handleJoinResponse(payload) {
     console.debug("[Game] Join response received", payload);
-    const { username, players, map } = payload;
+    const { username, players, currentMapIndex } = payload;
     this.username = username;
     this.players = players;
-    this.map = Game.processMap(map);
     this.color = players[username].color;
     this.score = 0;
+    this.updateMap(currentMapIndex);
 
     console.debug("[Game] Unsubscribing from JOIN_RES");
     this.client.unsubscribe(JOIN_RES);
@@ -714,6 +787,7 @@ class Game {
     this.client.subscribe([
       POSITION,
       SCORE,
+      UPDATE_MAP,
       UPDATE_PLAYER_JOINED,
       UPDATE_PLAYER_LEFT,
     ]);
@@ -777,6 +851,12 @@ class Game {
     console.log(`[Game] Player <${username}> disconnected`);
   }
 
+  handleNewMap(payload) {
+    const { currentMapIndex } = payload;
+    console.log("[Game] New map received", currentMapIndex);
+    this.updateMap(currentMapIndex);
+  }
+
   // Callbacks
 
   onConnect() {
@@ -789,8 +869,11 @@ class Game {
 // INSTANCES CREATION
 // ----------------------------------------------------------------------------
 
+const maps = new Maps();
+
 if (owner === "yes") {
-  const gameManager = new GameManager();
+  const gameManager = new GameManager(maps);
+  showMapNavigationButtons(gameManager);
 }
 
-const game = new Game();
+const game = new Game(maps);
